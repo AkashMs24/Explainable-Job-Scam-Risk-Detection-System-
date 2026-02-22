@@ -15,15 +15,14 @@ st.set_page_config(
 # =====================================================
 # PATHS (MATCH YOUR PROJECT STRUCTURE)
 # =====================================================
-BASE_DIR = Path(__file__).resolve().parent
-SRC_DIR = BASE_DIR / "src"
+from pathlib import Path
+import joblib
 
-# =====================================================
-# LOAD MODEL ARTIFACTS (FROM src/)
-# =====================================================
-fraud_model = joblib.load(SRC_DIR / "fraud_model.pkl")
-tfidf_vectorizer = joblib.load(SRC_DIR / "tfidf_vectorizer.pkl")
-feature_names = joblib.load(SRC_DIR / "feature_names.pkl")
+BASE_DIR = Path(__file__).resolve().parent
+
+fraud_model = joblib.load(BASE_DIR / "fraud_model.pkl")
+tfidf_vectorizer = joblib.load(BASE_DIR / "tfidf_vectorizer.pkl")
+feature_names = joblib.load(BASE_DIR / "feature_names.pkl")
 
 # =====================================================
 # SIDEBAR
@@ -153,4 +152,5 @@ if st.button("🔍 Analyze Scam Risk"):
     st.caption(
         "SCAMGUARD-AI provides ML-based decision support, "
         "not a definitive judgment."
+
     )
