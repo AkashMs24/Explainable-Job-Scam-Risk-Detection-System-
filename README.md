@@ -117,10 +117,10 @@ streamlit run app.py
 
 The app will open in your browser at:
 
-http://localhost:8501
 🌐 Deployment
 
 The application is designed to be deployed on Streamlit Community Cloud.
+https://explainable-job-scam-risk-detection-system.streamlit.app/
 
 Steps:
 
