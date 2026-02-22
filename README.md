@@ -106,17 +106,6 @@ Feature importance analysis
 
 Human-readable explanations in the UI
 
-🖥️ How to Run Locally
-1️⃣ Clone the Repository
-git clone https://github.com/your-username/Explainable-Job-Scam-Risk-Detection-System-using-NLP-and-ML.git
-cd Explainable-Job-Scam-Risk-Detection-System-using-NLP-and-ML
-2️⃣ Install Dependencies
-pip install -r requirements.txt
-3️⃣ Run the Streamlit App
-streamlit run app.py
-
-The app will open in your browser at:
-
 🌐 Deployment
 
 The application is designed to be deployed on Streamlit Community Cloud.
