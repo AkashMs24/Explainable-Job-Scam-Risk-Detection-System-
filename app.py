@@ -13,11 +13,8 @@ st.set_page_config(
 )
 
 # =====================================================
-# PATHS (MATCH YOUR PROJECT STRUCTURE)
+# LOAD MODEL ARTIFACTS
 # =====================================================
-from pathlib import Path
-import joblib
-
 BASE_DIR = Path(__file__).resolve().parent
 
 fraud_model = joblib.load(BASE_DIR / "fraud_model.pkl")
@@ -33,11 +30,11 @@ st.sidebar.caption("Explainable Job Scam Risk Intelligence System")
 st.sidebar.markdown("---")
 st.sidebar.write("• NLP-based fraud detection")
 st.sidebar.write("• Behavioral scam indicators")
-st.sidebar.write("• Risk scoring (0–100)")
+st.sidebar.write("• Decision-support risk scoring")
 st.sidebar.markdown("---")
 st.sidebar.caption(
-    "⚠️ Decision-support system.\n"
-    "Always verify job offers manually."
+    "⚠️ This system provides guidance, not final judgment.\n"
+    "Manual verification is always recommended."
 )
 
 # =====================================================
@@ -87,7 +84,7 @@ if st.button("🔍 Analyze Scam Risk"):
     combined_text = job_title + " " + job_description
     X_text = tfidf_vectorizer.transform([combined_text])
 
-    # ---------- BEHAVIORAL FEATURES (ORDER MATTERS!) ----------
+    # ---------- BEHAVIORAL FEATURES ----------
     desc_length = len(job_description)
     urgency = urgency_score(job_description)
     free_email = free_email_flag(company_profile)
@@ -101,7 +98,7 @@ if st.button("🔍 Analyze Scam Risk"):
     fraud_prob = fraud_model.predict_proba(X_final)[0][1]
 
     # =================================================
-    # RISK SCORING ENGINE (BUSINESS LOGIC)
+    # RISK SCORING ENGINE (CORE INTELLIGENCE)
     # =================================================
     salary_missing = int(salary_range.strip() == "")
 
@@ -114,6 +111,7 @@ if st.button("🔍 Analyze Scam Risk"):
 
     risk_score = round(min(risk_score, 100), 2)
 
+    # ---------- RISK BUCKET ----------
     if risk_score < 30:
         level = "LOW"
         color = "green"
@@ -138,6 +136,30 @@ if st.button("🔍 Analyze Scam Risk"):
     st.markdown(f"**Risk Category:** :{color}[{level}]")
     st.markdown(f"**Recommended Action:** {advice}")
 
+    # =================================================
+    # INTELLIGENCE LAYER (WHAT MAKES IT UNIQUE)
+    # =================================================
+    if urgency > 2 and free_email:
+        context = "This pattern strongly resembles mass internship scam campaigns."
+    elif salary_missing and desc_length < 300:
+        context = "Short descriptions with missing salary often indicate low-effort scams."
+    elif urgency > 0:
+        context = "Urgency-based language suggests pressure tactics commonly used in scams."
+    else:
+        context = "No dominant scam pattern detected based on known behavior."
+
+    st.info(f"🧠 **Risk Context Insight:** {context}")
+
+    # ---------- CONFIDENCE BAND ----------
+    if 45 <= risk_score <= 55:
+        st.warning(
+            "⚠️ **Borderline Risk Detected**: "
+            "The system is uncertain. Manual review is strongly recommended."
+        )
+
+    # =================================================
+    # EXPLAINABILITY
+    # =================================================
     with st.expander("🔍 Why was this job flagged?"):
         if urgency > 0:
             st.write("• Urgency-driven language detected")
@@ -148,9 +170,20 @@ if st.button("🔍 Analyze Scam Risk"):
         if urgency == 0 and salary_missing == 0 and free_email == 0:
             st.write("• No strong scam indicators detected")
 
+    # =================================================
+    # ADVISORY LAYER (VERY RARE IN STUDENT PROJECTS)
+    # =================================================
+    with st.expander("✅ How to reduce scam risk"):
+        st.write("• Verify company website and LinkedIn presence")
+        st.write("• Avoid paying registration or processing fees")
+        st.write("• Cross-check salary with market standards")
+        st.write("• Do not share documents before formal interviews")
+
+    # =================================================
+    # DISCLAIMER
+    # =================================================
     st.markdown("---")
     st.caption(
-        "SCAMGUARD-AI provides ML-based decision support, "
-        "not a definitive judgment."
-
+        "SCAMGUARD-AI is an ML-based decision-support system. "
+        "Predictions depend on historical patterns and may not capture new scam strategies."
     )
