@@ -97,6 +97,14 @@ if st.button("🔍 Analyze Scam Risk"):
     # ---------- MODEL PROBABILITY ----------
     fraud_prob = fraud_model.predict_proba(X_final)[0][1]
 
+    # ---------- MODEL CONFIDENCE ----------
+    if fraud_prob < 0.4:
+        model_confidence = "High"
+    elif fraud_prob < 0.6:
+        model_confidence = "Moderate"
+    else:
+        model_confidence = "High"
+
     # =================================================
     # RISK SCORING ENGINE (CORE INTELLIGENCE)
     # =================================================
@@ -125,6 +133,16 @@ if st.button("🔍 Analyze Scam Risk"):
         color = "red"
         advice = "High scam risk detected. Strongly avoid applying."
 
+    # ---------- PRIMARY RISK DRIVER ----------
+    if urgency > 2:
+        primary_driver = "Urgency-driven language"
+    elif free_email:
+        primary_driver = "Use of free email domain"
+    elif salary_missing:
+        primary_driver = "Lack of salary transparency"
+    else:
+        primary_driver = "No dominant risk driver"
+
     # =================================================
     # OUTPUT
     # =================================================
@@ -134,10 +152,12 @@ if st.button("🔍 Analyze Scam Risk"):
     st.progress(int(risk_score))
 
     st.markdown(f"**Risk Category:** :{color}[{level}]")
+    st.markdown(f"**Model Confidence:** {model_confidence}")
+    st.markdown(f"**Primary Risk Driver:** {primary_driver}")
     st.markdown(f"**Recommended Action:** {advice}")
 
     # =================================================
-    # INTELLIGENCE LAYER (WHAT MAKES IT UNIQUE)
+    # INTELLIGENCE LAYER
     # =================================================
     if urgency > 2 and free_email:
         context = "This pattern strongly resembles mass internship scam campaigns."
@@ -171,7 +191,7 @@ if st.button("🔍 Analyze Scam Risk"):
             st.write("• No strong scam indicators detected")
 
     # =================================================
-    # ADVISORY LAYER (VERY RARE IN STUDENT PROJECTS)
+    # ADVISORY LAYER
     # =================================================
     with st.expander("✅ How to reduce scam risk"):
         st.write("• Verify company website and LinkedIn presence")
