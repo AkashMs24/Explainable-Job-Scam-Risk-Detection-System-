@@ -3,480 +3,398 @@ import numpy as np
 import joblib
 from pathlib import Path
 from scipy.sparse import hstack
+import re
 
 # =====================================================
 # APP CONFIG
 # =====================================================
 st.set_page_config(
     page_title="SCAMGUARD-AI",
-    page_icon="🛡️",
-    layout="wide",
-    initial_sidebar_state="collapsed"
+    layout="centered"
 )
 
 # =====================================================
 # LOAD MODEL ARTIFACTS
 # =====================================================
 BASE_DIR = Path(__file__).resolve().parent
-fraud_model      = joblib.load(BASE_DIR / "fraud_model.pkl")
+
+fraud_model = joblib.load(BASE_DIR / "fraud_model.pkl")
 tfidf_vectorizer = joblib.load(BASE_DIR / "tfidf_vectorizer.pkl")
-feature_names    = joblib.load(BASE_DIR / "feature_names.pkl")
+feature_names = joblib.load(BASE_DIR / "feature_names.pkl")
+
+# =====================================================
+# SIDEBAR
+# =====================================================
+st.sidebar.title("🛡️ SCAMGUARD-AI")
+st.sidebar.caption("Explainable Job Scam Risk Intelligence System")
+
+st.sidebar.markdown("---")
+st.sidebar.write("• NLP-based fraud detection")
+st.sidebar.write("• Behavioral scam indicators")
+st.sidebar.write("• Decision-support risk scoring")
+st.sidebar.markdown("---")
+st.sidebar.caption(
+    "⚠️ This system provides guidance, not final judgment.\n"
+    "Manual verification is always recommended."
+)
+
+# =====================================================
+# MAIN UI
+# =====================================================
+st.title("🛡️ SCAMGUARD-AI")
+st.caption("Protecting Freshers from Fraudulent Job & Internship Scams")
+
+st.markdown("### 📥 Job Posting Details")
+
+job_title = st.text_input("Job Title")
+job_description = st.text_area("Job Description")
+company_profile = st.text_area("Company Profile / Contact Info")
+salary_range = st.text_input("Salary Range (optional)")
+
 
 # =====================================================
 # FEATURE ENGINEERING
 # =====================================================
-urgency_words = ["urgent","immediate","limited","apply fast","hurry","few slots","act now"]
-free_domains  = ["gmail.com","yahoo.com","outlook.com","hotmail.com"]
 
-def urgency_score(text):
+URGENCY_WORDS = [
+    "urgent", "immediate", "limited",
+    "apply fast", "hurry", "few slots", "act now",
+    "last chance", "closing soon", "today only", "don't miss"
+]
+
+FREE_DOMAINS = [
+    "gmail.com", "yahoo.com", "outlook.com",
+    "hotmail.com", "ymail.com", "rediffmail.com"
+]
+
+# Phrases that commonly appear in scam postings
+SCAM_PHRASES = [
+    "no experience required", "work from home", "earn up to",
+    "be your own boss", "unlimited earnings", "weekly payout",
+    "processing fee", "registration fee", "refundable deposit",
+    "part time", "home based", "per day earning",
+    "data entry", "typing work", "copy paste"
+]
+
+# Legitimate signals that reduce scam likelihood
+LEGIT_SIGNALS = [
+    "interview process", "background check", "employee benefits",
+    "annual leave", "health insurance", "provident fund",
+    "job description", "qualifications required", "minimum degree"
+]
+
+
+def urgency_score(text: str) -> int:
+    """Count urgency keyword hits in text."""
     text = str(text).lower()
-    return sum(word in text for word in urgency_words)
+    return sum(1 for word in URGENCY_WORDS if word in text)
 
-def free_email_flag(text):
+
+def free_email_flag(text: str) -> int:
+    """1 if a free email domain is found in company contact info."""
     text = str(text).lower()
-    return int(any(domain in text for domain in free_domains))
+    return int(any(domain in text for domain in FREE_DOMAINS))
+
+
+def scam_phrase_score(text: str) -> int:
+    """Count scam-indicative phrase hits."""
+    text = str(text).lower()
+    return sum(1 for phrase in SCAM_PHRASES if phrase in text)
+
+
+def legit_signal_score(text: str) -> int:
+    """Count legitimate job-posting signals."""
+    text = str(text).lower()
+    return sum(1 for phrase in LEGIT_SIGNALS if phrase in text)
+
+
+def caps_ratio(text: str) -> float:
+    """
+    Ratio of UPPERCASE words to total words.
+    Scam posts often use excessive caps for hype (e.g. 'EARN BIG NOW').
+    """
+    words = str(text).split()
+    if len(words) == 0:
+        return 0.0
+    caps_words = sum(1 for w in words if w.isupper() and len(w) > 1)
+    return caps_words / len(words)
+
+
+def suspicious_salary_flag(salary_text: str) -> int:
+    """
+    Detect unrealistically high salaries often used as bait.
+    Extracts numbers and flags if max value > 5 lakhs/month or
+    contains vague phrases like 'unlimited'.
+    """
+    if not salary_text.strip():
+        return 0
+
+    salary_lower = salary_text.lower()
+
+    # Vague / too-good-to-be-true language
+    if any(word in salary_lower for word in ["unlimited", "upto", "up to", "per day"]):
+        return 1
+
+    # Extract all numbers from salary string
+    numbers = re.findall(r'\d[\d,]*', salary_text.replace(",", ""))
+    if numbers:
+        try:
+            max_val = max(int(n.replace(",", "")) for n in numbers)
+            # Flag if monthly salary claim > 5,00,000 (unrealistic for fresher)
+            if max_val > 500000:
+                return 1
+        except ValueError:
+            pass
+
+    return 0
+
+
+def has_contact_info(text: str) -> int:
+    """1 if a phone number or email is present in company profile."""
+    phone_pattern = r'\b[\+]?[\d][\d\s\-]{8,14}\d\b'
+    email_pattern = r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+'
+    has_phone = bool(re.search(phone_pattern, str(text)))
+    has_email = bool(re.search(email_pattern, str(text)))
+    return int(has_phone or has_email)
+
+
+def model_confidence_label(prob: float) -> str:
+    """
+    Confidence is highest when probability is far from the decision boundary (0.5).
+    Distance from 0.5 → [0, 0.5]; normalize to [0, 1].
+    """
+    distance = abs(prob - 0.5)  # 0 = most uncertain, 0.5 = most certain
+    if distance >= 0.35:
+        return "High"
+    elif distance >= 0.15:
+        return "Moderate"
+    else:
+        return "Low"
+
 
 # =====================================================
-# GLOBAL CSS
+# RISK ANALYSIS
 # =====================================================
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
-*, *::before, *::after { box-sizing:border-box; }
-html, body, [class*="css"], .stApp { background:#0a0b0f !important; color:#e8e8f0 !important; font-family:'Space Grotesk',sans-serif !important; }
-#MainMenu,footer,header,[data-testid="stToolbar"],[data-testid="stDecoration"],[data-testid="stSidebarNav"] { display:none !important; }
-[data-testid="stSidebar"] { display:none !important; }
-.block-container { padding:0 !important; max-width:100% !important; }
-section.main > div { padding:0 !important; }
-.stTextInput,[data-testid="stTextInput"],.stTextArea,[data-testid="stTextArea"],.stButton,[data-testid="stButton"] {
-  position:absolute !important; opacity:0 !important; pointer-events:none !important;
-  width:1px !important; height:1px !important; overflow:hidden !important; top:-9999px !important;
-}
-::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-track{background:#0a0b0f} ::-webkit-scrollbar-thumb{background:#333;border-radius:4px}
-@keyframes fadeIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-</style>
-""", unsafe_allow_html=True)
+if st.button("🔍 Analyze Scam Risk"):
 
-# =====================================================
-# SESSION STATE
-# =====================================================
-for k,v in [("result",None),("history",[]),
-            ("job_title",""),("job_company",""),("job_email",""),("job_salary",""),("job_desc","")]:
-    if k not in st.session_state:
-        st.session_state[k] = v
+    if job_title.strip() == "" and job_description.strip() == "":
+        st.warning("Please enter at least a job title or description.")
+        st.stop()
 
-SAMPLES = {
-    "scam":  {"title":"Work From Home – Earn $5000/week","company":"GlobalEarnings LLC",
-              "email":"hr@globalearnings.gmail.com","salary":"$5000/week",
-              "desc":"No experience needed! Work from home and earn big. Urgent hiring — only few slots left. Send your SSN and bank details to get started immediately. Act now, limited positions!"},
-    "legit": {"title":"Software Engineer Intern","company":"Google",
-              "email":"recruiting@google.com","salary":"$45/hr",
-              "desc":"Join Google engineering team for a 12-week internship. Work on real products. Requirements: CS degree, Python/Java. Apply via careers.google.com. Structured hiring with technical interviews."}
-}
+    # ---------- TEXT FEATURES ----------
+    # Include all text fields for richer NLP signal
+    combined_text = " ".join([
+        job_title,
+        job_description,
+        company_profile,
+        salary_range
+    ])
+    X_text = tfidf_vectorizer.transform([combined_text])
 
-# =====================================================
-# HIDDEN INPUTS
-# =====================================================
-job_title_v   = st.text_input("t", key="job_title",   label_visibility="hidden")
-job_company_v = st.text_input("c", key="job_company", label_visibility="hidden")
-job_email_v   = st.text_input("e", key="job_email",   label_visibility="hidden")
-job_salary_v  = st.text_input("s", key="job_salary",  label_visibility="hidden")
-job_desc_v    = st.text_area("d",  key="job_desc",    label_visibility="hidden")
+    # ---------- BEHAVIORAL FEATURES ----------
+    desc_length = len(job_description)
+    urgency        = urgency_score(job_description + " " + job_title)
+    free_email     = free_email_flag(company_profile)
+    scam_phrases   = scam_phrase_score(job_description + " " + job_title)
+    legit_signals  = legit_signal_score(job_description + " " + company_profile)
+    caps            = caps_ratio(job_title + " " + job_description)
+    sus_salary      = suspicious_salary_flag(salary_range)
+    has_contact     = has_contact_info(company_profile)
+    salary_missing  = int(salary_range.strip() == "")
 
-c1,c2,c3 = st.columns(3)
-with c1: btn_scam  = st.button("Load Scam",    key="btn_scam")
-with c2: btn_legit = st.button("Load Legit",   key="btn_legit")
-with c3: btn_go    = st.button("Analyze",      key="btn_go")
+    X_behavior = np.array([[
+        desc_length,
+        urgency,
+        free_email,
+        scam_phrases,
+        legit_signals,
+        caps,
+        sus_salary,
+        has_contact,
+        salary_missing
+    ]])
 
-if btn_scam:
-    for k,v in SAMPLES["scam"].items():
-        st.session_state[f"job_{k}"] = v
-    st.rerun()
-if btn_legit:
-    for k,v in SAMPLES["legit"].items():
-        st.session_state[f"job_{k}"] = v
-    st.rerun()
+    # ---------- FINAL MODEL INPUT ----------
+    # NOTE: X_behavior columns must match what was used during training.
+    # If your model was trained with only [desc_length, urgency, free_email],
+    # use only those 3 columns here. The extra features above are available
+    # for rule-based scoring even if not used by the model directly.
+    X_final = hstack([X_text, X_behavior[:, :3]])  # Keep first 3 for model compatibility
 
-if btn_go:
-    t = st.session_state.get("job_title","")
-    d = st.session_state.get("job_desc","")
-    if t.strip() or d.strip():
-        e  = st.session_state.get("job_email","")
-        co = st.session_state.get("job_company","")
-        sa = st.session_state.get("job_salary","")
-        X_text     = tfidf_vectorizer.transform([t + " " + d])
-        dl         = len(d)
-        urg        = urgency_score(d)
-        fem        = free_email_flag(e + " " + co)
-        X_final    = hstack([X_text, np.array([[dl, urg, fem]])])
-        fp         = fraud_model.predict_proba(X_final)[0][1]
-        sm         = int(sa.strip() == "")
-        rs         = round(min((0.60*fp + 0.15*min(urg/5,1) + 0.15*sm + 0.10*fem)*100, 100), 2)
-        conf       = "Moderate" if 0.4 <= fp <= 0.6 else "High"
-        if rs < 30:   lv,ck,vi,adv = "LOW","green","✅","Looks legitimate. Standard precautions apply."
-        elif rs < 60: lv,ck,vi,adv = "MEDIUM","orange","⚠️","Proceed with caution. Avoid sharing personal information."
-        else:         lv,ck,vi,adv = "HIGH","red","⛔","High scam risk detected. Strongly avoid applying."
-        if urg > 2:  pd = "Urgency-driven language"
-        elif fem:    pd = "Use of free email domain"
-        elif sm:     pd = "Lack of salary transparency"
-        else:        pd = "No dominant risk driver"
-        flags = []
-        if urg > 0: flags.append("Urgency-driven language detected")
-        if sm:      flags.append("Salary information missing")
-        if fem:     flags.append("Free/personal email domain used")
-        if urg > 2 and fem: ctx = "This pattern strongly resembles mass internship scam campaigns."
-        elif sm and dl < 300: ctx = "Short descriptions with missing salary often indicate low-effort scams."
-        elif urg > 0: ctx = "Urgency-based language suggests pressure tactics commonly used in scams."
-        else: ctx = "No dominant scam pattern detected based on known behavior."
-        res = {"score":rs,"level":lv,"color_key":ck,"verdict_icon":vi,"advice":adv,
-               "primary_driver":pd,"confidence":conf,"fraud_prob":round(fp*100,1),
-               "flags":flags,"context":ctx,"title":t,"company":co}
-        st.session_state["result"]  = res
-        st.session_state["history"] = [res] + st.session_state["history"][:9]
-        st.rerun()
+    # ---------- MODEL PROBABILITY ----------
+    fraud_prob = fraud_model.predict_proba(X_final)[0][1]
 
-# =====================================================
-# RENDER VALUES
-# =====================================================
-r  = st.session_state.get("result", None)
-tv = (st.session_state.get("job_title","") or "").replace('"',"'")
-cv = (st.session_state.get("job_company","") or "").replace('"',"'")
-ev = (st.session_state.get("job_email","") or "").replace('"',"'")
-sv = (st.session_state.get("job_salary","") or "").replace('"',"'")
-dv = (st.session_state.get("job_desc","") or "").replace('"',"'").replace("\n","<br>")
+    # ---------- MODEL CONFIDENCE (FIXED) ----------
+    model_confidence = model_confidence_label(fraud_prob)
 
-SC = {"red":"#f87171","orange":"#fbbf24","green":"#4ade80"}
-GC = {"red":"rgba(220,38,38,0.25)","orange":"rgba(255,170,0,0.2)","green":"rgba(0,230,118,0.2)"}
-BC = {"red":"rgba(220,38,38,0.35)","orange":"rgba(255,170,0,0.35)","green":"rgba(0,230,118,0.35)"}
-BDGE = {"red":"badge-red","orange":"badge-orange","green":"badge-green"}
+    # =================================================
+    # RISK SCORING ENGINE
+    # =================================================
+    # Normalize component scores to [0, 1]
+    urgency_norm     = min(urgency / max(len(URGENCY_WORDS), 1), 1.0)
+    scam_norm        = min(scam_phrases / 5, 1.0)
+    legit_norm       = min(legit_signals / 5, 1.0)        # reduces risk
+    caps_norm        = min(caps / 0.5, 1.0)               # >50% caps = fully flagged
 
-if r:
-    sc = SC[r["color_key"]]; gc = GC[r["color_key"]]; bc = BC[r["color_key"]]; bdg = BDGE[r["color_key"]]
-    flags_html = "".join([f'<div class="flag-item"><span class="dot dot-red"></span>{f}</div>' for f in r["flags"]]) \
-                 if r["flags"] else '<div class="flag-item"><span class="dot dot-green"></span>No strong scam indicators detected</div>'
-    ring_dash = (r["score"]/100)*314.16
-    result_html = f"""
-    <div class="result-card" style="border-color:{bc};box-shadow:0 0 28px {gc};">
-      <div style="display:flex;align-items:center;gap:20px;margin-bottom:18px;">
-        <div style="position:relative;width:120px;height:120px;flex-shrink:0;">
-          <svg width="120" height="120" style="transform:rotate(-90deg);">
-            <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="9"/>
-            <circle cx="60" cy="60" r="50" fill="none" stroke="{sc}" stroke-width="9"
-              stroke-dasharray="{ring_dash} 314.16" stroke-linecap="round"
-              style="filter:drop-shadow(0 0 8px {sc});"/>
-          </svg>
-          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-            <span style="font-family:'Bebas Neue',cursive;font-size:28px;color:{sc};letter-spacing:1px;">{r['score']}</span>
-            <span style="font-family:'Space Mono',monospace;font-size:9px;color:rgba(255,255,255,0.4);">/100</span>
-          </div>
-        </div>
-        <div style="flex:1;">
-          <div style="font-family:'Bebas Neue',cursive;font-size:24px;letter-spacing:3px;color:{sc};margin-bottom:10px;">{r['verdict_icon']} {r['level']} RISK</div>
-          <span class="badge {bdg}">{r['level']} RISK</span>&nbsp;
-          <span class="badge badge-neutral">CONF: {r['confidence'].upper()}</span>
-        </div>
-      </div>
-      <div class="prog-track"><div class="prog-fill" style="width:{r['score']}%;background:{sc};box-shadow:0 0 8px {sc};"></div></div>
-    </div>
-    <div style="display:flex;gap:10px;margin-bottom:12px;">
-      <div class="mini-card"><div class="mini-label">Primary Risk Driver</div><div class="mini-value">{r['primary_driver']}</div></div>
-      <div class="mini-card"><div class="mini-label">Fraud Probability</div><div class="mini-value">{r['fraud_prob']}%</div></div>
-    </div>
-    <div class="insight-box">
-      <div class="insight-label">🧠 RISK CONTEXT INSIGHT</div>
-      <div style="font-size:13px;color:rgba(255,255,255,0.75);line-height:1.6;">{r['context']}</div>
-    </div>
-    <div style="padding:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:12px;">
-      <div style="font-family:'Space Mono',monospace;font-size:10px;color:rgba(255,255,255,0.4);letter-spacing:2px;margin-bottom:10px;">⚡ WHY FLAGGED</div>
-      {flags_html}
-    </div>
-    <div style="padding:14px;background:{gc};border:1px solid {bc};border-radius:10px;">
-      <div style="font-family:'Space Mono',monospace;font-size:10px;color:rgba(255,255,255,0.4);letter-spacing:2px;margin-bottom:6px;">📋 RECOMMENDED ACTION</div>
-      <div style="font-size:13px;color:{sc};font-weight:600;">{r['advice']}</div>
-    </div>"""
-else:
-    result_html = """
-    <div style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;opacity:.25;padding:60px 0;">
-      <div style="font-size:64px;">🛡️</div>
-      <div style="font-family:'Bebas Neue',cursive;font-size:22px;letter-spacing:3px;">AWAITING ANALYSIS</div>
-      <div style="font-family:'Space Mono',monospace;font-size:11px;color:rgba(255,255,255,0.5);text-align:center;">Submit a job posting to begin intelligence scan</div>
-    </div>"""
+    risk_score = (
+        0.45 * fraud_prob           +   # Primary: ML model
+        0.15 * urgency_norm         +   # Urgency language
+        0.10 * salary_missing       +   # No salary info
+        0.10 * free_email           +   # Free email domain
+        0.08 * scam_norm            +   # Scam phrase density
+        0.07 * sus_salary           +   # Suspicious salary claim
+        0.05 * caps_norm            -   # Caps hype
+        0.10 * legit_norm * (1 - fraud_prob)  # Legit signals reduce risk (context-sensitive)
+    ) * 100
 
-history_html = ""
-for h in st.session_state.get("history",[]):
-    hc = SC[h["color_key"]]; hbc = BC[h["color_key"]]
-    history_html += f"""
-    <div style="display:flex;align-items:center;gap:16px;padding:14px;background:rgba(255,255,255,0.03);border:1px solid {hbc};border-radius:12px;margin-bottom:10px;">
-      <div style="font-family:'Bebas Neue',cursive;font-size:32px;color:{hc};min-width:60px;text-align:center;">{h['score']}</div>
-      <div style="flex:1;">
-        <div style="font-size:14px;font-weight:600;color:#e8e8f0;margin-bottom:2px;">{h['title'] or 'Untitled'}</div>
-        <div style="font-size:12px;color:rgba(255,255,255,0.4);">{h['company'] or 'Unknown'}</div>
-      </div>
-      <span style="font-family:'Space Mono',monospace;font-size:11px;padding:4px 12px;border-radius:20px;background:rgba(255,255,255,0.05);border:1px solid {hbc};color:{hc};letter-spacing:1px;">{h['verdict_icon']} {h['level']} RISK</span>
-    </div>"""
-if not history_html:
-    history_html = '<div style="text-align:center;padding:60px;color:rgba(255,255,255,0.2);font-family:\'Space Mono\',monospace;font-size:13px;">No scans yet.</div>'
+    risk_score = round(min(max(risk_score, 0), 100), 2)
 
-st.markdown(f"""
-<style>
-.sg-wrap{{min-height:100vh;background:#0a0b0f;background-image:radial-gradient(ellipse at 20% 0%,rgba(220,38,38,0.07) 0%,transparent 50%),radial-gradient(ellipse at 80% 100%,rgba(59,130,246,0.05) 0%,transparent 50%);}}
-.topbar{{border-bottom:1px solid rgba(255,255,255,0.06);padding:14px 32px;display:flex;align-items:center;gap:16px;background:rgba(0,0,0,0.45);backdrop-filter:blur(10px);position:sticky;top:0;z-index:100;}}
-.logo-box{{width:38px;height:38px;background:linear-gradient(135deg,#dc2626,#7f1d1d);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;}}
-.tab-btn{{padding:6px 18px;border-radius:6px;border:1px solid;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .2s;background:transparent;}}
-.tab-active{{border-color:#dc2626!important;background:rgba(220,38,38,0.15)!important;color:#fff!important;}}
-.tab-inactive{{border-color:rgba(255,255,255,0.1);color:rgba(255,255,255,0.45);}}
-.main-grid{{max-width:1100px;margin:0 auto;padding:32px 24px;display:grid;grid-template-columns:1fr 1fr;gap:24px;}}
-.section-label{{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:3px;color:#dc2626;text-transform:uppercase;margin-bottom:14px;}}
-.field-label{{display:block;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;color:rgba(255,255,255,0.35);text-transform:uppercase;margin-bottom:6px;}}
-.fake-input{{width:100%;padding:10px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8e8f0;font-size:13px;font-family:'Space Grotesk',sans-serif;margin-bottom:14px;min-height:40px;cursor:pointer;word-break:break-word;transition:border-color .2s;}}
-.fake-input:hover{{border-color:rgba(220,38,38,0.4);}}
-.fake-input.empty{{color:rgba(255,255,255,0.2);}}
-.fake-textarea{{min-height:130px;line-height:1.6;}}
-.analyze-btn{{width:100%;padding:14px;background:linear-gradient(135deg,#dc2626,#b91c1c);border:none;border-radius:10px;color:#fff;font-family:'Bebas Neue',cursive;font-size:15px;letter-spacing:3px;box-shadow:0 4px 24px rgba(220,38,38,0.3);cursor:pointer;transition:all .3s;margin-top:4px;}}
-.analyze-btn:hover{{box-shadow:0 6px 32px rgba(220,38,38,0.5);transform:translateY(-1px);}}
-.sample-btn{{padding:7px 14px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.5);font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;cursor:pointer;transition:all .2s;}}
-.sample-btn:hover{{border-color:#dc2626;color:#fff;}}
-.result-card{{background:rgba(255,255,255,0.03);border-radius:16px;padding:24px;margin-bottom:14px;animation:fadeIn .5s ease;}}
-.badge{{display:inline-block;padding:4px 14px;border-radius:20px;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1.5px;font-weight:700;}}
-.badge-red{{background:rgba(220,38,38,0.15);border:1px solid rgba(220,38,38,0.4);color:#f87171;}}
-.badge-orange{{background:rgba(255,170,0,0.15);border:1px solid rgba(255,170,0,0.4);color:#fbbf24;}}
-.badge-green{{background:rgba(0,230,118,0.15);border:1px solid rgba(0,230,118,0.4);color:#4ade80;}}
-.badge-neutral{{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.5);}}
-.mini-card{{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px 14px;flex:1;}}
-.mini-label{{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;color:rgba(255,255,255,0.35);margin-bottom:4px;text-transform:uppercase;}}
-.mini-value{{font-size:13px;color:#e8e8f0;font-weight:500;}}
-.prog-track{{background:rgba(255,255,255,0.07);border-radius:4px;height:6px;overflow:hidden;}}
-.prog-fill{{height:100%;border-radius:4px;transition:width 1s ease;}}
-.insight-box{{padding:14px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:10px;margin-bottom:12px;}}
-.insight-label{{font-family:'Space Mono',monospace;font-size:10px;color:#818cf8;letter-spacing:2px;margin-bottom:6px;}}
-.flag-item{{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);margin-bottom:6px;font-size:12px;color:rgba(255,255,255,0.7);}}
-.dot{{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block;}}
-.dot-red{{background:#f87171;}}
-.dot-green{{background:#4ade80;}}
-.disclaimer{{font-family:'Space Mono',monospace;font-size:10px;color:rgba(255,255,255,0.2);text-align:center;margin-top:10px;}}
-</style>
+    # ---------- RISK BUCKET ----------
+    if risk_score < 30:
+        level  = "LOW"
+        color  = "green"
+        advice = "Job appears relatively safe. Still verify company details independently."
+    elif risk_score < 60:
+        level  = "MEDIUM"
+        color  = "orange"
+        advice = "Proceed with caution. Avoid sharing personal documents or paying any fee."
+    else:
+        level  = "HIGH"
+        color  = "red"
+        advice = "High scam risk detected. Strongly avoid applying or sharing information."
 
-<div class="sg-wrap">
-  <!-- TOPBAR -->
-  <div class="topbar">
-    <div class="logo-box">🛡️</div>
-    <div>
-      <div style="font-family:'Bebas Neue',cursive;font-size:18px;letter-spacing:3px;color:#fff;">SCAMGUARD<span style="color:#dc2626">-AI</span></div>
-      <div style="font-family:'Space Mono',monospace;font-size:9px;color:rgba(255,255,255,0.35);letter-spacing:2px;">INTELLIGENCE SYSTEM v2.0</div>
-    </div>
-    <div style="flex:1;"></div>
-    <button class="tab-btn tab-active"   id="btn-analyze"  onclick="switchTab('analyze')">ANALYZE</button>
-    <button class="tab-btn tab-inactive" id="btn-history"  onclick="switchTab('history')">HISTORY</button>
-  </div>
+    # ---------- PRIMARY RISK DRIVER (ranked by impact) ----------
+    drivers = {
+        "ML model fraud signal":           fraud_prob * 0.45 * 100,
+        "Urgency-driven language":         urgency_norm * 0.15 * 100,
+        "Scam phrase density":             scam_norm * 0.08 * 100,
+        "Free/unverified email domain":    free_email * 0.10 * 100,
+        "Suspicious salary claim":         sus_salary * 0.07 * 100,
+        "Lack of salary transparency":     salary_missing * 0.10 * 100,
+        "Excessive capitalization (hype)": caps_norm * 0.05 * 100,
+    }
+    # Filter out zero-contribution drivers, pick the top contributor
+    active_drivers = {k: v for k, v in drivers.items() if v > 0}
+    if active_drivers:
+        primary_driver = max(active_drivers, key=active_drivers.get)
+    else:
+        primary_driver = "No dominant risk driver identified"
 
-  <!-- ANALYZE TAB -->
-  <div id="tab-analyze" class="main-grid">
-    <!-- LEFT -->
-    <div>
-      <div class="section-label">// Job Posting Input</div>
-      <p style="font-size:13px;color:rgba(255,255,255,0.4);line-height:1.6;margin-bottom:16px;">
-        Paste a job listing below. Our hybrid ML + rule-based engine will assess scam probability.
-      </p>
-      <div style="display:flex;gap:8px;margin-bottom:18px;">
-        <button class="sample-btn" onclick="loadSample('scam')">⛔ SAMPLE 1: SCAM</button>
-        <button class="sample-btn" onclick="loadSample('legit')">✅ SAMPLE 2: LEGIT</button>
-      </div>
+    # =================================================
+    # OUTPUT
+    # =================================================
+    st.markdown("### 📊 Scam Risk Assessment")
 
-      <label class="field-label">Job Title</label>
-      <div class="fake-input {'empty' if not tv else ''}" id="disp-title" onclick="openEdit('title',this)">{tv if tv else 'e.g. Software Engineer Intern'}</div>
+    st.metric("Composite Scam Risk Score", f"{risk_score} / 100")
+    st.progress(int(risk_score))
 
-      <label class="field-label">Company Name</label>
-      <div class="fake-input {'empty' if not cv else ''}" id="disp-company" onclick="openEdit('company',this)">{cv if cv else 'e.g. Acme Corp'}</div>
+    st.markdown(f"**Risk Category:** :{color}[{level}]")
+    st.markdown(f"**Model Confidence:** {model_confidence}")
+    st.markdown(f"**Primary Risk Driver:** {primary_driver}")
+    st.markdown(f"**Recommended Action:** {advice}")
 
-      <label class="field-label">Contact Email</label>
-      <div class="fake-input {'empty' if not ev else ''}" id="disp-email" onclick="openEdit('email',this)">{ev if ev else 'e.g. hr@company.com'}</div>
+    # =================================================
+    # INTELLIGENCE LAYER — context-aware pattern matching
+    # =================================================
+    if free_email and (urgency > 1 or scam_phrases > 2):
+        context = "Pattern matches mass scam campaigns: free email + urgency/scam phrases together are a strong combined signal."
+    elif sus_salary and salary_missing == 0:
+        context = "Unrealistically high salary claim detected — a common bait tactic in fresher-targeted scams."
+    elif scam_phrases >= 3:
+        context = f"High density of scam-associated phrases ({scam_phrases} detected). This language pattern closely mirrors known fraudulent postings."
+    elif legit_signals >= 3 and fraud_prob < 0.4:
+        context = "Multiple legitimate job-posting signals found (benefits, interview process, qualifications). Risk is likely low."
+    elif urgency > 0:
+        context = "Urgency-based language detected — pressure tactics are frequently used to prevent candidates from doing due diligence."
+    elif caps > 0.2:
+        context = "Excessive capitalization detected — a hype/attention-grab pattern common in low-credibility postings."
+    elif not has_contact and company_profile.strip():
+        context = "Company profile provided but lacks verifiable contact information (phone/email)."
+    else:
+        context = "No dominant scam pattern detected based on known behavioral signals."
 
-      <label class="field-label">Salary / Compensation</label>
-      <div class="fake-input {'empty' if not sv else ''}" id="disp-salary" onclick="openEdit('salary',this)">{sv if sv else 'e.g. $20/hr or $5000/week'}</div>
+    st.info(f"🧠 **Risk Context Insight:** {context}")
 
-      <label class="field-label">Job Description</label>
-      <div class="fake-input fake-textarea {'empty' if not dv else ''}" id="disp-desc" onclick="openEdit('desc',this)">{dv if dv else 'Paste the full job description here...'}</div>
+    # ---------- BORDERLINE WARNING ----------
+    if 40 <= risk_score <= 60:
+        st.warning(
+            "⚠️ **Borderline Risk Detected**: "
+            "The system is uncertain. Manual review and independent verification is strongly recommended."
+        )
 
-      <!-- inline edit modal -->
-      <div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center;">
-        <div style="background:#13141a;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:24px;width:90%;max-width:520px;">
-          <div id="edit-label" style="font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;color:rgba(255,255,255,0.4);margin-bottom:10px;text-transform:uppercase;"></div>
-          <textarea id="edit-ta" rows="5" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#e8e8f0;font-size:13px;font-family:'Space Grotesk',sans-serif;padding:10px 14px;resize:vertical;"></textarea>
-          <div style="display:flex;gap:10px;margin-top:12px;justify-content:flex-end;">
-            <button onclick="closeEdit()" style="padding:8px 20px;background:transparent;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:rgba(255,255,255,0.5);cursor:pointer;font-family:'Space Mono',monospace;font-size:12px;">CANCEL</button>
-            <button onclick="saveEdit()" style="padding:8px 20px;background:linear-gradient(135deg,#dc2626,#b91c1c);border:none;border-radius:8px;color:#fff;cursor:pointer;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:1px;">SAVE</button>
-          </div>
-        </div>
-      </div>
+    # =================================================
+    # EXPLAINABILITY — full signal breakdown
+    # =================================================
+    with st.expander("🔍 Why was this job flagged?"):
+        st.markdown(f"**ML Model Fraud Probability:** `{fraud_prob:.2%}`")
+        if urgency > 0:
+            st.write(f"• Urgency-driven language detected ({urgency} keyword(s))")
+        if scam_phrases > 0:
+            st.write(f"• Scam-associated phrases found ({scam_phrases} phrase(s))")
+        if free_email:
+            st.write("• Free/personal email domain detected in company details")
+        if sus_salary:
+            st.write("• Suspicious or unrealistically high salary claim")
+        if salary_missing:
+            st.write("• Salary information not provided")
+        if caps > 0.2:
+            st.write(f"• Excessive capitalization in text ({caps:.0%} of words in caps)")
+        if not has_contact and company_profile.strip():
+            st.write("• No verifiable contact details (phone/email) found in company profile")
+        if legit_signals > 0:
+            st.write(f"✅ Legitimate signals found: {legit_signals} indicator(s) reduced risk score")
+        if urgency == 0 and scam_phrases == 0 and free_email == 0 and salary_missing == 0:
+            st.write("• No strong scam indicators detected in rule-based analysis")
 
-      <button class="analyze-btn" onclick="runAnalyze()">🔍  ANALYZE SCAM RISK</button>
-      <div class="disclaimer">⚠ Guidance only — always verify independently</div>
-    </div>
+    # =================================================
+    # SIGNAL SUMMARY TABLE
+    # =================================================
+    with st.expander("📋 Feature Signal Summary"):
+        signal_data = {
+            "Signal": [
+                "ML Fraud Probability",
+                "Urgency Keywords",
+                "Scam Phrases",
+                "Legit Signals",
+                "Free Email Domain",
+                "Suspicious Salary",
+                "Salary Provided",
+                "Contact Info Present",
+                "Description Length (chars)",
+                "Caps Ratio",
+            ],
+            "Value": [
+                f"{fraud_prob:.2%}",
+                urgency,
+                scam_phrases,
+                legit_signals,
+                "Yes" if free_email else "No",
+                "Yes" if sus_salary else "No",
+                "No" if salary_missing else "Yes",
+                "Yes" if has_contact else "No",
+                desc_length,
+                f"{caps:.0%}",
+            ]
+        }
+        st.table(signal_data)
 
-    <!-- RIGHT -->
-    <div>{result_html}</div>
-  </div>
+    # =================================================
+    # ADVISORY LAYER
+    # =================================================
+    with st.expander("✅ How to reduce scam risk"):
+        st.write("• Verify company website and LinkedIn presence independently")
+        st.write("• Never pay registration, processing, or security deposit fees")
+        st.write("• Cross-check salary claims with market standards (Glassdoor, Naukri)")
+        st.write("• Do not share Aadhaar, PAN, or bank details before a formal offer letter")
+        st.write("• Prefer companies with official domain emails (not Gmail/Yahoo)")
+        st.write("• Check for company registration on MCA21 (India) or official registries")
 
-  <!-- HISTORY TAB -->
-  <div id="tab-history" style="display:none;max-width:1100px;margin:0 auto;padding:32px 24px;">
-    <div class="section-label">// SCAN HISTORY ({len(st.session_state.get('history',[]))})</div>
-    {history_html}
-  </div>
-
-</div>
-
-<script>
-const SAMPLES = {{
-  scam:  {{title:"Work From Home – Earn $5000/week",company:"GlobalEarnings LLC",email:"hr@globalearnings.gmail.com",salary:"$5000/week",desc:"No experience needed! Work from home and earn big. Urgent hiring — only few slots left. Send your SSN and bank details to get started immediately. Act now, limited positions!"}},
-  legit: {{title:"Software Engineer Intern",company:"Google",email:"recruiting@google.com",salary:"$45/hr",desc:"Join Google engineering team for a 12-week internship. Work on real products. Requirements: CS degree, Python/Java. Apply via careers.google.com. Structured hiring with technical interviews."}}
-}};
-
-let currentField = null;
-const fieldData = {{ title:"{tv}", company:"{cv}", email:"{ev}", salary:"{sv}", desc:"{dv.replace('<br>','\\n')}" }};
-
-function getSTInput(key) {{
-  const all = document.querySelectorAll('input, textarea');
-  for(const el of all) {{
-    if(el.getAttribute('aria-label')===key || el.id===key || el.name===key) return el;
-  }}
-  // try label text match
-  for(const el of all) {{
-    const lbl = document.querySelector(`label[for="${{el.id}}"]`);
-    if(lbl && lbl.textContent.trim().toLowerCase()===key) return el;
-  }}
-  return null;
-}}
-
-function setSTVal(key, val) {{
-  // find the hidden streamlit input by trying multiple selectors
-  const frames = [document, ...(window.parent !== window ? [window.parent.document] : [])];
-  for(const doc of frames) {{
-    const inputs = doc.querySelectorAll('input, textarea');
-    for(const el of inputs) {{
-      if(el.style.top==='-9999px' || el.style.opacity==='0') {{
-        // find by position in DOM order
-      }}
-    }}
-  }}
-  // Most reliable: find streamlit widget by label
-  const allEls = document.querySelectorAll('[data-testid] input, [data-testid] textarea');
-  // Use native setter to trigger React onChange
-  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
-  const nativeTextAreaSetter   = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value');
-  for(const el of document.querySelectorAll('input, textarea')) {{
-    try {{
-      const setter = el.tagName==='TEXTAREA' ? nativeTextAreaSetter?.set : nativeInputValueSetter?.set;
-      if(setter) {{
-        setter.call(el, val);
-        el.dispatchEvent(new Event('input',{{bubbles:true}}));
-        el.dispatchEvent(new Event('change',{{bubbles:true}}));
-      }}
-    }} catch(e) {{}}
-  }}
-}}
-
-function openEdit(field, el) {{
-  currentField = field;
-  const modal = document.getElementById('edit-modal');
-  const ta    = document.getElementById('edit-ta');
-  const lbl   = document.getElementById('edit-label');
-  lbl.textContent = field.toUpperCase();
-  ta.value = fieldData[field] || '';
-  ta.rows  = (field==='desc') ? 8 : 3;
-  modal.style.display = 'flex';
-  setTimeout(()=>ta.focus(),100);
-}}
-
-function closeEdit() {{
-  document.getElementById('edit-modal').style.display = 'none';
-}}
-
-function saveEdit() {{
-  const val = document.getElementById('edit-ta').value;
-  fieldData[currentField] = val;
-  const disp = document.getElementById('disp-' + currentField);
-  if(disp) {{
-    disp.innerHTML = val ? val.replace(/\\n/g,'<br>') : '';
-    disp.classList.toggle('empty', !val);
-  }}
-  // try to set hidden streamlit input
-  syncToStreamlit(currentField, val);
-  closeEdit();
-}}
-
-function syncToStreamlit(field, val) {{
-  // map field to streamlit key label
-  const keyMap = {{title:'t',company:'c',email:'e',salary:'s',desc:'d'}};
-  const label = keyMap[field];
-  const inputs = document.querySelectorAll('input, textarea');
-  let found = false;
-  for(const el of inputs) {{
-    // check aria-label or placeholder pattern
-    const ph = el.getAttribute('placeholder') || '';
-    if(ph.includes(label) || el.getAttribute('aria-label')===label) {{
-      triggerChange(el, val); found=true; break;
-    }}
-  }}
-  if(!found) {{
-    // fallback: set all hidden ones by order
-    const hidden = [...document.querySelectorAll('input,textarea')].filter(e=>e.style.position==='absolute'||e.offsetParent===null);
-    const orderMap = {{title:0,company:1,email:2,salary:3,desc:4}};
-    const idx = orderMap[field];
-    if(hidden[idx]) triggerChange(hidden[idx], val);
-  }}
-}}
-
-function triggerChange(el, val) {{
-  const proto = el.tagName==='TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-  const setter = Object.getOwnPropertyDescriptor(proto,'value')?.set;
-  if(setter) setter.call(el, val);
-  el.dispatchEvent(new Event('input',  {{bubbles:true}}));
-  el.dispatchEvent(new Event('change', {{bubbles:true}}));
-}}
-
-function loadSample(type) {{
-  const s = SAMPLES[type];
-  ['title','company','email','salary','desc'].forEach(f=>{{
-    fieldData[f] = s[f];
-    const disp = document.getElementById('disp-'+f);
-    if(disp){{
-      disp.innerHTML = f==='desc' ? s[f].replace(/\\n/g,'<br>') : s[f];
-      disp.classList.remove('empty');
-    }}
-    syncToStreamlit(f, s[f]);
-  }});
-  // click hidden load scam/legit button
-  setTimeout(()=>{{
-    const btns = document.querySelectorAll('button');
-    const label = type==='scam' ? 'Load Scam' : 'Load Legit';
-    for(const b of btns) {{
-      if(b.textContent.trim()===label) {{ b.click(); return; }}
-    }}
-  }}, 300);
-}}
-
-function runAnalyze() {{
-  // ensure all values are synced, then click hidden Analyze button
-  ['title','company','email','salary','desc'].forEach(f=>syncToStreamlit(f, fieldData[f]||''));
-  setTimeout(()=>{{
-    const btns = document.querySelectorAll('button');
-    for(const b of btns){{
-      if(b.textContent.trim()==='Analyze'){{ b.click(); return; }}
-    }}
-  }}, 400);
-}}
-
-function switchTab(t) {{
-  document.getElementById('tab-analyze').style.display = t==='analyze'?'grid':'none';
-  document.getElementById('tab-history').style.display = t==='history'?'block':'none';
-  document.getElementById('btn-analyze').className = 'tab-btn '+(t==='analyze'?'tab-active':'tab-inactive');
-  document.getElementById('btn-history').className = 'tab-btn '+(t==='history'?'tab-active':'tab-inactive');
-}}
-
-// click outside modal to close
-document.getElementById('edit-modal')?.addEventListener('click', function(e){{
-  if(e.target===this) closeEdit();
-}});
-</script>
-""", unsafe_allow_html=True)
+    # =================================================
+    # DISCLAIMER
+    # =================================================
+    st.markdown("---")
+    st.caption(
+        "SCAMGUARD-AI is an ML-based decision-support system. "
+        "Predictions depend on historical training data and may not capture emerging scam strategies. "
+        "Always perform manual verification before applying."
+    )
