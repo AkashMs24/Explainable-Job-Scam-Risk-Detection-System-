@@ -152,9 +152,3 @@ Built by **Akash M S** · Presidency University, Bengaluru
 
 </div>
 
-<div align="center">
-
-Built by **Akash M S** · Presidency University, Bengaluru  
-[LinkedIn](https://www.linkedin.com/in/akash-m-s-414a21297) · [GitHub](https://github.com/AkashMs24) · ms29akash@gmail.com
-
-</div>
