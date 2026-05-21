@@ -115,10 +115,16 @@ Salary      : Not mentioned
 
 ## Run locally
 
-```bashgit clone https://github.com/AkashMs24/Explainable-Job-Scam-Risk-Detection-System-.git
+---
+
+## Run locally
+
+```bash
+git clone https://github.com/AkashMs24/Explainable-Job-Scam-Risk-Detection-System-.git
 cd Explainable-Job-Scam-Risk-Detection-System-
 pip install -r requirements.txt
 streamlit run app.py
+```
 
 ---
 
@@ -138,6 +144,13 @@ streamlit run app.py
 - [Decision Intelligence System](https://github.com/AkashMs24/Decisioniq-ai-business-intelligence) — ML + LLM business platform
 
 ---
+
+<div align="center">
+
+Built by **Akash M S** · Presidency University, Bengaluru  
+[LinkedIn](https://www.linkedin.com/in/akash-m-s-414a21297) · [GitHub](https://github.com/AkashMs24) · ms29akash@gmail.com
+
+</div>
 
 <div align="center">
 
