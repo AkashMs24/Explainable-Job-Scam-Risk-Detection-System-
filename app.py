@@ -1,7 +1,8 @@
 """
-SCAMGUARD-AI  |  app.py  (UI v3 — Dark Professional)
-======================================================
-Logic unchanged. Only CSS + layout upgraded.
+SCAMGUARD-AI  |  app.py  (UI v4 — Full Monochrome, Fixed Expanders)
+====================================================================
+Logic unchanged. CSS fully monochrome (black/white/gray only).
+Expander arrow fix: target SVG directly, no pseudo-element overrides.
 """
 import streamlit as st
 import numpy as np
@@ -56,13 +57,55 @@ html, body, [class*="css"] {
 }
 [data-testid="stSidebar"] * { font-family: 'Syne', sans-serif !important; }
 [data-testid="stSidebar"] .stMarkdown p,
-[data-testid="stSidebar"] .stMarkdown li { font-size: 13px !important; color: #9090a8 !important; line-height: 1.65 !important; }
-[data-testid="stSidebar"] h1 { font-size: 1.1rem !important; font-weight: 800 !important; color: #f5f3ec !important; }
-[data-testid="stSidebar"] h4 { font-size: 0.72rem !important; font-weight: 700 !important; color: #e85d5d !important; letter-spacing: 0.12em !important; text-transform: uppercase !important; }
-[data-testid="stSidebar"] code { background: #1a1c22 !important; color: #e85d5d !important; padding: 1px 5px !important; border-radius: 3px !important; font-size: 11px !important; }
-[data-testid="stSidebar"] .stExpander { background: #141519 !important; border: 1px solid #1c1e24 !important; border-radius: 8px !important; }
+[data-testid="stSidebar"] .stMarkdown li {
+    font-size: 13px !important;
+    color: #9090a8 !important;
+    line-height: 1.65 !important;
+}
+[data-testid="stSidebar"] h1 {
+    font-size: 1.1rem !important;
+    font-weight: 800 !important;
+    color: #f5f3ec !important;
+}
+[data-testid="stSidebar"] h4 {
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    color: #c0bdb0 !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+}
+[data-testid="stSidebar"] code {
+    background: #1a1c22 !important;
+    color: #c0bdb0 !important;
+    padding: 1px 5px !important;
+    border-radius: 3px !important;
+    font-size: 11px !important;
+}
 [data-testid="stSidebar"] hr { border-color: #1c1e24 !important; }
 [data-testid="stSidebar"] caption { color: #50506a !important; font-size: 11px !important; }
+
+/* ── SIDEBAR EXPANDERS
+   Do NOT use content: on summary — Streamlit injects SVG arrows as React
+   components. Targeting the SVG directly is the only reliable fix. ── */
+[data-testid="stSidebar"] [data-testid="stExpander"] {
+    background: #141519 !important;
+    border: 1px solid #1c1e24 !important;
+    border-radius: 8px !important;
+    margin-bottom: 0.4rem !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary {
+    color: #c0bdb0 !important;
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary svg {
+    fill: #50506a !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary p {
+    color: #c0bdb0 !important;
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+}
 
 /* ── TOPBAR ── */
 .topbar {
@@ -73,12 +116,10 @@ html, body, [class*="css"] {
     border-radius: 12px;
     margin-bottom: 0.25rem;
 }
-.topbar-brand {
-    display: flex; align-items: center; gap: 10px;
-}
+.topbar-brand { display: flex; align-items: center; gap: 10px; }
 .topbar-icon {
     width: 32px; height: 32px; border-radius: 8px;
-    background: #e85d5d;
+    background: #1c1e24;
     display: flex; align-items: center; justify-content: center;
     font-size: 16px; line-height: 1;
 }
@@ -86,35 +127,42 @@ html, body, [class*="css"] {
     font-size: 1rem; font-weight: 800; letter-spacing: 0.06em;
     color: #f5f3ec; text-transform: uppercase;
 }
-.topbar-sub { font-size: 0.65rem; color: #60607a; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 1px; }
+.topbar-sub { font-size: 0.65rem; color: #40405a; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 1px; }
 .topbar-status {
     display: flex; align-items: center; gap: 6px;
-    font-size: 0.68rem; font-weight: 600; color: #4ade80;
+    font-size: 0.68rem; font-weight: 600; color: #9090a8;
     letter-spacing: 0.08em; text-transform: uppercase;
 }
-.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; animation: pulse 2s infinite; }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.status-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #c0bdb0; animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
 /* ── HERO ── */
-.hero {
-    text-align: center;
-    padding: 2rem 1rem 1.5rem;
-}
+.hero { text-align: center; padding: 2rem 1rem 1.5rem; }
 .hero-kicker {
     font-size: 0.63rem; font-weight: 700; letter-spacing: 0.2em;
-    text-transform: uppercase; color: #e85d5d;
-    margin-bottom: 0.7rem;
+    text-transform: uppercase; color: #50506a; margin-bottom: 0.7rem;
 }
 .hero-title {
     font-size: 2.4rem; font-weight: 800; line-height: 1.1;
     color: #f5f3ec; letter-spacing: -0.02em; margin: 0 0 0.6rem;
 }
-.hero-title em { font-style: normal; color: #e85d5d; }
-.hero-desc {
-    font-size: 0.88rem; color: #6a6a84; max-width: 520px;
-    margin: 0 auto; line-height: 1.65;
+.hero-title em {
+    font-style: normal; color: #ffffff;
+    text-decoration: underline;
+    text-decoration-color: #3a3a52;
+    text-underline-offset: 6px;
 }
-.hero-rule { width: 40px; height: 2px; background: #e85d5d; margin: 1.2rem auto 0; border-radius: 2px; opacity: 0.5; }
+.hero-desc {
+    font-size: 0.88rem; color: #6a6a84;
+    max-width: 520px; margin: 0 auto; line-height: 1.65;
+}
+.hero-rule {
+    width: 40px; height: 2px; background: #2a2c32;
+    margin: 1.2rem auto 0; border-radius: 2px;
+}
 
 /* ── STAT STRIP ── */
 .stat-strip { display: flex; gap: 10px; margin: 1rem 0 1.5rem; }
@@ -122,8 +170,14 @@ html, body, [class*="css"] {
     flex: 1; background: #0f1014; border: 1px solid #1c1e24;
     border-radius: 10px; padding: 0.8rem 1rem; text-align: center;
 }
-.stat-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.3rem; font-weight: 500; color: #e85d5d; line-height: 1; }
-.stat-lbl { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #40405a; margin-top: 5px; }
+.stat-val {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.3rem; font-weight: 500; color: #e8e5de; line-height: 1;
+}
+.stat-lbl {
+    font-size: 0.6rem; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #40405a; margin-top: 5px;
+}
 
 /* ── SECTION LABEL ── */
 .slabel {
@@ -132,7 +186,7 @@ html, body, [class*="css"] {
     display: flex; align-items: center; gap: 10px;
     margin: 1.4rem 0 0.7rem;
 }
-.slabel::before { content:''; width: 20px; height: 1px; background: #e85d5d; opacity: 0.6; }
+.slabel::before { content:''; width: 20px; height: 1px; background: #3a3a52; }
 .slabel::after  { content:''; flex: 1; height: 1px; background: #1c1e24; }
 
 /* ── INPUT PANEL ── */
@@ -146,27 +200,34 @@ html, body, [class*="css"] {
 .mc {
     background: #0f1014; border: 1px solid #1c1e24;
     border-radius: 10px; padding: 0.9rem 1rem;
-    border-top: 2px solid #1c1e24;
+    border-top: 2px solid #2a2c32;
 }
-.mc.danger { border-top-color: #e85d5d; }
-.mc.warn   { border-top-color: #f59e0b; }
-.mc.good   { border-top-color: #4ade80; }
-.mc.neutral{ border-top-color: #6b7280; }
-.mc-lbl { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #40405a; margin-bottom: 6px; }
-.mc-val { font-size: 1.5rem; font-weight: 700; color: #f5f3ec; font-family: 'IBM Plex Mono', monospace; line-height: 1.1; }
-.mc-val.danger { color: #e85d5d; }
-.mc-val.warn   { color: #f59e0b; }
-.mc-val.good   { color: #4ade80; }
+.mc.danger { border-top-color: #ffffff; }
+.mc.warn   { border-top-color: #888898; }
+.mc.good   { border-top-color: #505060; }
+.mc.neutral{ border-top-color: #2a2c32; }
+.mc-lbl {
+    font-size: 0.58rem; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: #40405a; margin-bottom: 6px;
+}
+.mc-val {
+    font-size: 1.5rem; font-weight: 700; color: #f5f3ec;
+    font-family: 'IBM Plex Mono', monospace; line-height: 1.1;
+}
+.mc-val.danger { color: #ffffff; }
+.mc-val.warn   { color: #c0bdb0; }
+.mc-val.good   { color: #9090a8; }
 
 /* ── PILLS ── */
 .pill {
     display: inline-block; padding: 2px 10px; border-radius: 5px;
-    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    font-size: 0.65rem; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
 }
-.pill-red    { background: rgba(232,93,93,0.12); border: 1px solid rgba(232,93,93,0.3); color: #e85d5d; }
-.pill-amber  { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); color: #f59e0b; }
-.pill-green  { background: rgba(74,222,128,0.12); border: 1px solid rgba(74,222,128,0.3); color: #4ade80; }
-.pill-gray   { background: rgba(107,114,128,0.12); border: 1px solid rgba(107,114,128,0.3); color: #9ca3af; }
+.pill-red   { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2); color: #f5f3ec; }
+.pill-amber { background: rgba(160,160,160,0.08); border: 1px solid rgba(160,160,160,0.2); color: #c0bdb0; }
+.pill-green { background: rgba(90,90,100,0.12);  border: 1px solid rgba(90,90,100,0.25);  color: #9090a8; }
+.pill-gray  { background: rgba(60,60,70,0.12);   border: 1px solid rgba(60,60,70,0.25);   color: #60607a; }
 
 /* ── FEATURE ROW ── */
 .feat-row {
@@ -176,38 +237,48 @@ html, body, [class*="css"] {
 }
 .feat-label { font-size: 0.8rem; font-weight: 600; color: #c0bdb0; }
 .feat-sub { font-size: 0.65rem; color: #40405a; margin-top: 2px; }
-.feat-val { font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; color: #e85d5d; font-weight: 500; }
+.feat-val {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82rem; color: #9090a8; font-weight: 500;
+}
 
 /* ── MINI BAR ── */
 .mini-bar-bg { background: #1a1c22; border-radius: 3px; height: 3px; margin-top: 6px; }
-.mini-bar-fill { height: 3px; border-radius: 3px; background: #e85d5d; }
+.mini-bar-fill { height: 3px; border-radius: 3px; background: #505060; }
 
 /* ── INSIGHT BOX ── */
 .insight {
-    background: #110d0d; border: 1px solid #2a1a1a;
-    border-left: 3px solid #e85d5d;
+    background: #111214; border: 1px solid #1c1e24;
+    border-left: 3px solid #505060;
     border-radius: 8px; padding: 0.9rem 1.1rem;
-    font-size: 0.82rem; color: #c0a090; line-height: 1.6; margin: 0.6rem 0;
+    font-size: 0.82rem; color: #9090a8; line-height: 1.6; margin: 0.6rem 0;
 }
-.insight b { color: #e85d5d; }
+.insight b { color: #c0bdb0; }
 
 /* ── DS NOTE ── */
 .ds-note {
-    background: #0d1018; border: 1px solid #1a2030;
-    border-left: 3px solid #3b82f6;
+    background: #0d0e12; border: 1px solid #1a1c24;
+    border-left: 3px solid #2a3048;
     border-radius: 8px; padding: 0.8rem 1rem;
-    font-size: 0.78rem; color: #8090b0; line-height: 1.6; margin: 0.5rem 0;
+    font-size: 0.78rem; color: #60708a; line-height: 1.6; margin: 0.5rem 0;
 }
-.ds-note b { color: #3b82f6; }
+.ds-note b { color: #8090b0; }
+.ds-note code {
+    background: #1a1c22 !important;
+    color: #8090b0 !important;
+    padding: 1px 4px !important;
+    border-radius: 3px !important;
+    font-size: 0.72rem !important;
+}
 
 /* ── ADVISORY BOX ── */
 .advisory {
-    background: #100d06; border: 1px solid #28200a;
-    border-left: 3px solid #f59e0b;
+    background: #0f1014; border: 1px solid #1c1e24;
+    border-left: 3px solid #3a3a52;
     border-radius: 8px; padding: 0.8rem 1rem;
-    font-size: 0.8rem; color: #b09060; line-height: 1.6; margin: 0.5rem 0;
+    font-size: 0.8rem; color: #9090a8; line-height: 1.6; margin: 0.5rem 0;
 }
-.advisory b { color: #f59e0b; }
+.advisory b { color: #c0bdb0; }
 
 /* ── FLAG ROW ── */
 .flag-row {
@@ -222,13 +293,13 @@ html, body, [class*="css"] {
 .trace-box {
     background: #0b0c0f; border: 1px solid #1c1e24;
     border-radius: 8px; padding: 1rem 1.1rem;
-    font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem;
-    color: #8888a8; line-height: 1.9;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem; color: #8888a8; line-height: 1.9;
 }
-.trace-box span.key { color: #6b7280; }
-.trace-box span.val { color: #e85d5d; }
-.trace-box span.ok  { color: #4ade80; }
-.trace-box span.warn{ color: #f59e0b; }
+.trace-box span.key  { color: #40405a; }
+.trace-box span.val  { color: #c0bdb0; }
+.trace-box span.ok   { color: #9090a8; }
+.trace-box span.warn { color: #888898; }
 
 /* ── CHECKLIST ── */
 .check-item {
@@ -238,8 +309,8 @@ html, body, [class*="css"] {
 }
 .check-num {
     width: 22px; height: 22px; border-radius: 5px;
-    background: rgba(232,93,93,0.12); border: 1px solid rgba(232,93,93,0.25);
-    color: #e85d5d; font-size: 0.7rem; font-weight: 700;
+    background: rgba(255,255,255,0.03); border: 1px solid #2a2c32;
+    color: #9090a8; font-size: 0.7rem; font-weight: 700;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .check-title { font-size: 0.82rem; font-weight: 600; color: #d0cdc6; }
@@ -251,13 +322,16 @@ html, body, [class*="css"] {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 3.5rem; font-weight: 500; line-height: 1;
 }
-.gauge-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #40405a; margin-top: 8px; }
+.gauge-label {
+    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.15em;
+    text-transform: uppercase; color: #40405a; margin-top: 8px;
+}
 .gauge-bar-bg { background: #1a1c22; border-radius: 4px; height: 6px; margin: 12px 0 6px; }
 .gauge-bar-fill { height: 6px; border-radius: 4px; transition: width 0.5s; }
 
-/* ── STREAMLIT OVERRIDES ── */
+/* ── STREAMLIT BUTTON ── */
 div.stButton > button {
-    background: #e85d5d !important;
+    background: #e8e5de !important;
     color: #0b0c0f !important;
     border: none !important;
     border-radius: 8px !important;
@@ -268,8 +342,9 @@ div.stButton > button {
     padding: 0.5rem 1.2rem !important;
     transition: opacity 0.15s, transform 0.1s !important;
 }
-div.stButton > button:hover { opacity: 0.82 !important; transform: translateY(-1px) !important; }
+div.stButton > button:hover { opacity: 0.75 !important; transform: translateY(-1px) !important; }
 
+/* ── INPUTS ── */
 .stTextInput input, .stTextArea textarea {
     background: #0b0c0f !important;
     border: 1px solid #1c1e24 !important;
@@ -279,8 +354,8 @@ div.stButton > button:hover { opacity: 0.82 !important; transform: translateY(-1
     font-size: 0.88rem !important;
 }
 .stTextInput input:focus, .stTextArea textarea:focus {
-    border-color: #e85d5d !important;
-    box-shadow: 0 0 0 2px rgba(232,93,93,0.15) !important;
+    border-color: #50506a !important;
+    box-shadow: 0 0 0 2px rgba(80,80,106,0.2) !important;
 }
 .stSelectbox > div > div {
     background: #0b0c0f !important;
@@ -288,27 +363,47 @@ div.stButton > button:hover { opacity: 0.82 !important; transform: translateY(-1
     border-radius: 8px !important;
     color: #e8e5de !important;
 }
+
+/* ── MAIN CONTENT EXPANDERS
+   Key fix: target the SVG icon directly rather than fighting with
+   content: pseudo-elements on <summary>, which breaks Streamlit's
+   React-injected arrow icons and shows raw icon names. ── */
 .stExpander {
     background: #0f1014 !important;
     border: 1px solid #1c1e24 !important;
     border-radius: 10px !important;
 }
-.stExpander summary { color: #c0bdb0 !important; font-size: 0.85rem !important; font-weight: 600 !important; }
+.stExpander summary {
+    color: #c0bdb0 !important;
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
+}
+.stExpander summary p {
+    color: #c0bdb0 !important;
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
+}
+.stExpander summary svg {
+    fill: #50506a !important;
+}
+
+/* ── MISC OVERRIDES ── */
 .stAlert { background: #0f1014 !important; border-radius: 8px !important; border: 1px solid #1c1e24 !important; }
 .stDataFrame { background: #0b0c0f !important; border-radius: 8px !important; }
 hr, .stDivider { border-color: #1c1e24 !important; }
-.stSpinner > div { color: #e85d5d !important; }
+.stSpinner > div { color: #9090a8 !important; }
 label { color: #72728a !important; font-size: 0.8rem !important; font-weight: 600 !important; letter-spacing: 0.04em !important; }
 
 /* ── FOOTER ── */
 .footer {
     text-align: center; padding: 1.2rem 0 0.5rem;
-    font-size: 0.68rem; color: #28283a; border-top: 1px solid #141619;
+    font-size: 0.68rem; color: #28283a;
+    border-top: 1px solid #141619;
     margin-top: 2rem; letter-spacing: 0.06em;
 }
-.footer b { color: #e85d5d; font-weight: 600; }
+.footer b { color: #50506a; font-weight: 600; }
 
-/* ── MATPLOTLIB DARK ── */
+/* ── MATPLOTLIB ── */
 .stPlotlyChart, .stPyplot { background: transparent !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -334,8 +429,8 @@ fraud_model, tfidf_vectorizer, feature_names = load_artifacts()
 # =====================================================================
 # CONSTANTS — EXACT MATCH TO TRAINING
 # =====================================================================
-URGENCY_WORDS  = ["urgent", "immediate", "limited", "apply fast", "hurry", "few slots", "act now"]
-FREE_DOMAINS   = ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com"]
+URGENCY_WORDS   = ["urgent", "immediate", "limited", "apply fast", "hurry", "few slots", "act now"]
+FREE_DOMAINS    = ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com"]
 FRAUD_THRESHOLD = 0.35
 
 # =====================================================================
@@ -357,8 +452,12 @@ def build_feature_vector(job_title, job_description, company_profile, salary_ran
     free_email = free_email_flag(str(company_profile))
     X_behavior = np.array([[desc_len, urgency, free_email]])
     X_final    = hstack([X_text, X_behavior])
-    fd = {"desc_length": desc_len, "urgency": urgency, "free_email": free_email,
-          "salary_missing": int(not salary_range.strip())}
+    fd = {
+        "desc_length":    desc_len,
+        "urgency":        urgency,
+        "free_email":     free_email,
+        "salary_missing": int(not salary_range.strip()),
+    }
     return X_final, fd
 
 def compute_risk_score(fraud_prob, fd):
@@ -375,15 +474,18 @@ def compute_risk_score(fraud_prob, fd):
     return round(min(max(score, 0), 100), 2)
 
 def get_risk_level(score):
-    if score < 30:   return "LOW",    "pill-green", "good",    "#4ade80", "Job appears relatively safe. Verify company details independently."
-    elif score < 60: return "MEDIUM", "pill-amber", "warn",    "#f59e0b", "Proceed with caution. Do not share documents or pay any fee."
-    else:            return "HIGH",   "pill-red",   "danger",  "#e85d5d", "High scam risk. Do NOT apply or share personal information."
+    if score < 30:
+        return "LOW",    "pill-green", "good",    "#9090a8", "Job appears relatively safe. Verify company details independently."
+    elif score < 60:
+        return "MEDIUM", "pill-amber", "warn",    "#888898", "Proceed with caution. Do not share documents or pay any fee."
+    else:
+        return "HIGH",   "pill-red",   "danger",  "#ffffff", "High scam risk. Do NOT apply or share personal information."
 
 def model_confidence(prob):
     dist = abs(prob - FRAUD_THRESHOLD)
-    if dist >= 0.25:   return "High",           "pill-green"
-    elif dist >= 0.10: return "Moderate",        "pill-amber"
-    return               "Low (borderline)",     "pill-red"
+    if dist >= 0.25:   return "High",             "pill-green"
+    elif dist >= 0.10: return "Moderate",          "pill-amber"
+    return               "Low (borderline)",       "pill-red"
 
 def caps_ratio_fn(text):
     words = str(text).split()
@@ -397,8 +499,9 @@ def suspicious_salary(salary_text):
     nums = re.findall(r'\d[\d,]*', salary_text)
     if nums:
         try:
-            if max(int(n.replace(",","")) for n in nums) > 500000: return 1
-        except: pass
+            if max(int(n.replace(",", "")) for n in nums) > 500000: return 1
+        except:
+            pass
     return 0
 
 def top_driver(adj_score, fd):
@@ -448,7 +551,10 @@ with st.sidebar:
 Recall optimized > Precision.
 Missing a scam costs more than a false alarm.
         """)
-        st.markdown('<div class="ds-note">📌 Accuracy is misleading on imbalanced data. Use F1 + AUC-ROC.</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="ds-note">📌 Accuracy is misleading on imbalanced data. Use F1 + AUC-ROC.</div>',
+            unsafe_allow_html=True
+        )
 
     with st.expander("Pipeline"):
         st.code("""text → TF-IDF (5000)
@@ -523,14 +629,18 @@ st.markdown('<div class="input-panel">', unsafe_allow_html=True)
 c1, c2 = st.columns(2, gap="large")
 with c1:
     job_title       = st.text_input("Job Title", placeholder="e.g. Data Entry Executive")
-    company_profile = st.text_area("Company Profile / Contact Info",
-                                   placeholder="Company details, email address, phone…",
-                                   height=110)
+    company_profile = st.text_area(
+        "Company Profile / Contact Info",
+        placeholder="Company details, email address, phone…",
+        height=110
+    )
 with c2:
     salary_range    = st.text_input("Salary Range", placeholder="e.g. ₹15,000/month  or leave blank")
-    job_description = st.text_area("Job Description",
-                                   placeholder="Paste full job description here…",
-                                   height=110)
+    job_description = st.text_area(
+        "Job Description",
+        placeholder="Paste full job description here…",
+        height=110
+    )
 
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -549,9 +659,9 @@ if run:
     with st.spinner("Running ML analysis…"):
         time.sleep(0.35)
 
-    X_final, fd   = build_feature_vector(job_title, job_description, company_profile, salary_range)
-    fraud_prob    = fraud_model.predict_proba(X_final)[0][1]
-    risk_score    = compute_risk_score(fraud_prob, fd)
+    X_final, fd     = build_feature_vector(job_title, job_description, company_profile, salary_range)
+    fraud_prob      = fraud_model.predict_proba(X_final)[0][1]
+    risk_score      = compute_risk_score(fraud_prob, fd)
     lvl, lvl_pill, card_cls, accent_color, advice = get_risk_level(risk_score)
     conf, conf_pill = model_confidence(fraud_prob)
     model_decision  = "FRAUD" if fraud_prob >= FRAUD_THRESHOLD else "LEGITIMATE"
@@ -567,8 +677,9 @@ if run:
     sus_sal  = suspicious_salary(salary_range)
 
     SCAM_EXTRA = [
-        "no experience required","work from home","earn up to","processing fee",
-        "registration fee","unlimited earnings","weekly payout","data entry","typing work","copy paste"
+        "no experience required", "work from home", "earn up to", "processing fee",
+        "registration fee", "unlimited earnings", "weekly payout",
+        "data entry", "typing work", "copy paste",
     ]
     matched_scam = [p for p in SCAM_EXTRA if p in (job_description + " " + job_title).lower()]
 
@@ -579,7 +690,6 @@ if run:
 
     with g_col:
         bar_w = int(risk_score)
-        bar_color = accent_color
         st.markdown(f"""
 <div class="gauge-wrap">
     <div class="gauge-num" style="color:{accent_color};">{risk_score}</div>
@@ -620,26 +730,35 @@ if run:
     <div style="font-size:0.72rem;color:#9090a8;margin-top:6px;line-height:1.4;">{driver[:28]}…</div>
 </div>""", unsafe_allow_html=True)
 
-        st.markdown(f'<div class="advisory" style="margin-top:0.75rem;"><b>Recommended Action:</b> {advice}</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="advisory" style="margin-top:0.75rem;"><b>Recommended Action:</b> {advice}</div>',
+            unsafe_allow_html=True
+        )
 
         if abs(fraud_prob - FRAUD_THRESHOLD) < 0.08:
-            st.markdown(f'<div class="insight"><b>⚡ Borderline:</b> Model probability ({fraud_prob:.1%}) is very close to decision threshold ({FRAUD_THRESHOLD}). Manual review strongly recommended.</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="insight"><b>⚡ Borderline:</b> Model probability ({fraud_prob:.1%}) is very close to decision threshold ({FRAUD_THRESHOLD}). Manual review strongly recommended.</div>',
+                unsafe_allow_html=True
+            )
 
     # ── SECTION 2: FEATURE BREAKDOWN ─────────────────────────────────────────
     st.markdown('<div class="slabel">② Feature Signal Breakdown</div>', unsafe_allow_html=True)
-    st.markdown('<div class="ds-note"><b>DS Note:</b> Features below exactly match training features. Rule-based signals (scam phrases, caps, salary) are additive post-model indicators — not in the trained model, but useful for behavioral explanation.</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="ds-note"><b>DS Note:</b> Features below exactly match training features. Rule-based signals (scam phrases, caps, salary) are additive post-model indicators — not in the trained model, but useful for behavioral explanation.</div>',
+        unsafe_allow_html=True
+    )
 
     f1, f2 = st.columns(2, gap="large")
 
     with f1:
         st.markdown('<p style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#40405a;margin-bottom:0.6rem;">Trained Model Features</p>', unsafe_allow_html=True)
 
-        email_status = "🔴 DETECTED" if fd["free_email"] else "🟢 CLEAR"
+        email_status = "⬛ DETECTED" if fd["free_email"] else "⬜ CLEAR"
         st.markdown(f"""
 <div class="feat-row">
     <div>
         <div class="feat-label">Free Email Domain</div>
-        <div class="feat-sub">Training feature: <code style="background:#1a1c22;color:#e85d5d;padding:1px 4px;border-radius:3px;">free_email</code> in company_profile</div>
+        <div class="feat-sub">Training feature: <code style="background:#1a1c22;color:#9090a8;padding:1px 4px;border-radius:3px;">free_email</code> in company_profile</div>
     </div>
     <div class="feat-val">{email_status}</div>
 </div>""", unsafe_allow_html=True)
@@ -650,7 +769,7 @@ if run:
     <div style="display:flex;justify-content:space-between;width:100%;">
         <div>
             <div class="feat-label">Urgency Keywords</div>
-            <div class="feat-sub">Training feature: <code style="background:#1a1c22;color:#e85d5d;padding:1px 4px;border-radius:3px;">urgency_score</code></div>
+            <div class="feat-sub">Training feature: <code style="background:#1a1c22;color:#9090a8;padding:1px 4px;border-radius:3px;">urgency_score</code></div>
         </div>
         <div class="feat-val">{fd['urgency']} / {len(URGENCY_WORDS)}</div>
     </div>
@@ -663,11 +782,11 @@ if run:
     <div style="display:flex;justify-content:space-between;width:100%;">
         <div>
             <div class="feat-label">Description Length</div>
-            <div class="feat-sub">Training feature: <code style="background:#1a1c22;color:#e85d5d;padding:1px 4px;border-radius:3px;">desc_length</code> · Short &lt;200 = higher risk</div>
+            <div class="feat-sub">Training feature: <code style="background:#1a1c22;color:#9090a8;padding:1px 4px;border-radius:3px;">desc_length</code> · Short &lt;200 = higher risk</div>
         </div>
         <div class="feat-val">{fd['desc_length']} chars</div>
     </div>
-    <div class="mini-bar-bg" style="width:100%;"><div class="mini-bar-fill" style="width:{int(desc_pct*100)}%;background:#3b82f6;"></div></div>
+    <div class="mini-bar-bg" style="width:100%;"><div class="mini-bar-fill" style="width:{int(desc_pct*100)}%;background:#3a3a52;"></div></div>
 </div>""", unsafe_allow_html=True)
 
         if PD_AVAILABLE and contributions:
@@ -680,7 +799,7 @@ if run:
     with f2:
         st.markdown('<p style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#40405a;margin-bottom:0.6rem;">Additional Behavioral Signals</p>', unsafe_allow_html=True)
 
-        sal_status = "🟢 PROVIDED" if not fd["salary_missing"] else "🔴 MISSING"
+        sal_status = "⬜ PROVIDED" if not fd["salary_missing"] else "⬛ MISSING"
         st.markdown(f"""
 <div class="feat-row">
     <div>
@@ -700,7 +819,7 @@ if run:
         </div>
         <div class="feat-val">{len(matched_scam)}</div>
     </div>
-    <div class="mini-bar-bg" style="width:100%;"><div class="mini-bar-fill" style="width:{int(scam_pct*100)}%;background:#f59e0b;"></div></div>
+    <div class="mini-bar-bg" style="width:100%;"><div class="mini-bar-fill" style="width:{int(scam_pct*100)}%;background:#888898;"></div></div>
 </div>""", unsafe_allow_html=True)
 
         caps_pct = min(caps / 0.5, 1.0)
@@ -713,10 +832,10 @@ if run:
         </div>
         <div class="feat-val">{caps:.0%}</div>
     </div>
-    <div class="mini-bar-bg" style="width:100%;"><div class="mini-bar-fill" style="width:{int(caps_pct*100)}%;background:#f59e0b;"></div></div>
+    <div class="mini-bar-bg" style="width:100%;"><div class="mini-bar-fill" style="width:{int(caps_pct*100)}%;background:#888898;"></div></div>
 </div>""", unsafe_allow_html=True)
 
-        sus_text = "🔴 FLAGGED" if sus_sal else "🟢 NORMAL"
+        sus_text = "⬛ FLAGGED" if sus_sal else "⬜ NORMAL"
         st.markdown(f"""
 <div class="feat-row">
     <div>
@@ -728,15 +847,22 @@ if run:
 
     # ── SECTION 3: SHAP ──────────────────────────────────────────────────────
     st.markdown('<div class="slabel">③ SHAP Explainability</div>', unsafe_allow_html=True)
-    st.markdown('<div class="ds-note"><b>DS Note:</b> SHAP uses game theory to fairly attribute the prediction across features. For Logistic Regression, SHAP = <code style="background:#1a2030;color:#3b82f6;padding:1px 4px;border-radius:3px;">coef[i] × feature_value[i]</code> in log-odds space — mathematically exact. <b style="color:#e85d5d;">Red → FRAUD</b> &nbsp;·&nbsp; <b style="color:#3b82f6;">Blue → LEGITIMATE</b>.</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="ds-note"><b>DS Note:</b> SHAP uses game theory to fairly attribute the prediction across features. For Logistic Regression, SHAP = <code>coef[i] × feature_value[i]</code> in log-odds space — mathematically exact. <b style="color:#c0bdb0;">Light bars → FRAUD</b> &nbsp;·&nbsp; <b style="color:#505060;">Dark bars → LEGITIMATE</b>.</div>',
+        unsafe_allow_html=True
+    )
 
     if SHAP_AVAILABLE and MPL_AVAILABLE:
         with st.spinner("Computing SHAP values…"):
             try:
-                explainer   = shap.LinearExplainer(fraud_model, shap.sample(X_final, 1),
-                                                   feature_perturbation="interventional")
+                explainer   = shap.LinearExplainer(
+                    fraud_model, shap.sample(X_final, 1),
+                    feature_perturbation="interventional"
+                )
                 shap_values = explainer.shap_values(X_final)
-                sv = np.array(shap_values[0] if isinstance(shap_values, list) else shap_values).flatten()
+                sv = np.array(
+                    shap_values[0] if isinstance(shap_values, list) else shap_values
+                ).flatten()
                 n  = min(len(sv), len(feature_names))
                 sv, fn = sv[:n], feature_names[:n]
                 top_idx   = np.argsort(np.abs(sv))[-15:][::-1]
@@ -747,20 +873,25 @@ if run:
                 fig, ax = plt.subplots(figsize=(9, 5))
                 fig.patch.set_facecolor("#0f1014")
                 ax.set_facecolor("#0b0c0f")
-                colors = ["#e85d5d" if v > 0 else "#3b82f6" for v in top_vals]
+                colors = ["#e8e5de" if v > 0 else "#505060" for v in top_vals]
                 ax.barh(range(len(top_names)), top_vals[::-1], color=colors[::-1], height=0.6)
                 ax.set_yticks(range(len(top_names)))
                 ax.set_yticklabels(top_names[::-1], fontsize=8.5, color="#9090a8")
                 ax.axvline(0, color="#2a2c32", linewidth=1, linestyle="--")
                 ax.set_xlabel("SHAP Value  ( + → FRAUD  ·  − → LEGIT )", fontsize=8.5, color="#50506a")
-                ax.set_title("Top 15 Feature Contributions (SHAP — Logistic Regression)",
-                             fontweight="bold", color="#c0bdb0", fontsize=10, pad=12)
+                ax.set_title(
+                    "Top 15 Feature Contributions (SHAP — Logistic Regression)",
+                    fontweight="bold", color="#c0bdb0", fontsize=10, pad=12
+                )
                 ax.tick_params(colors="#50506a")
-                for spine in ax.spines.values(): spine.set_edgecolor("#1c1e24")
-                red_p  = mpatches.Patch(color="#e85d5d", label="→ FRAUD")
-                blue_p = mpatches.Patch(color="#3b82f6", label="→ LEGIT")
-                ax.legend(handles=[red_p, blue_p], fontsize=8, facecolor="#0f1014",
-                          edgecolor="#1c1e24", labelcolor="#9090a8")
+                for spine in ax.spines.values():
+                    spine.set_edgecolor("#1c1e24")
+                light_p = mpatches.Patch(color="#e8e5de", label="→ FRAUD")
+                dark_p  = mpatches.Patch(color="#505060", label="→ LEGIT")
+                ax.legend(
+                    handles=[light_p, dark_p], fontsize=8,
+                    facecolor="#0f1014", edgecolor="#1c1e24", labelcolor="#9090a8"
+                )
                 plt.tight_layout()
                 st.pyplot(fig, use_container_width=True)
                 plt.close()
@@ -792,33 +923,32 @@ if run:
 
     # ── EXPANDERS ────────────────────────────────────────────────────────────
     with st.expander("🔍 Full Rule-Based Explainability Report"):
-        st.markdown('<div class="trace-box">', unsafe_allow_html=True)
-        any_flag = False
+        any_flag   = False
         flags_html = ""
         if fd["urgency"] > 0:
             hit = [w for w in URGENCY_WORDS if w in job_description.lower()]
-            flags_html += f'<div class="flag-row"><div class="flag-icon">🔴</div><div><div>Urgency keywords: <span style="color:#e85d5d;">{fd["urgency"]} hit(s)</span> — {", ".join(hit)}</div></div></div>'
+            flags_html += f'<div class="flag-row"><div class="flag-icon">▪</div><div><div>Urgency keywords: <span style="color:#c0bdb0;">{fd["urgency"]} hit(s)</span> — {", ".join(hit)}</div></div></div>'
             any_flag = True
         if fd["free_email"]:
             hit_d = [d for d in FREE_DOMAINS if d in company_profile.lower()]
-            flags_html += f'<div class="flag-row"><div class="flag-icon">🔴</div><div><div>Free email domain: <span style="color:#e85d5d;">{"".join(hit_d)}</span></div></div></div>'
+            flags_html += f'<div class="flag-row"><div class="flag-icon">▪</div><div><div>Free email domain: <span style="color:#c0bdb0;">{"".join(hit_d)}</span></div></div></div>'
             any_flag = True
         if fd["salary_missing"]:
-            flags_html += '<div class="flag-row"><div class="flag-icon">🟡</div><div><div>Salary not provided</div></div></div>'
+            flags_html += '<div class="flag-row"><div class="flag-icon">◦</div><div><div>Salary not provided</div></div></div>'
             any_flag = True
         if matched_scam:
-            flags_html += f'<div class="flag-row"><div class="flag-icon">🟡</div><div><div>Scam phrases: {", ".join(matched_scam[:5])}</div></div></div>'
+            flags_html += f'<div class="flag-row"><div class="flag-icon">◦</div><div><div>Scam phrases: {", ".join(matched_scam[:5])}</div></div></div>'
             any_flag = True
         if caps > 0.15:
-            flags_html += f'<div class="flag-row"><div class="flag-icon">🟡</div><div><div>High caps ratio: {caps:.0%}</div></div></div>'
+            flags_html += f'<div class="flag-row"><div class="flag-icon">◦</div><div><div>High caps ratio: {caps:.0%}</div></div></div>'
             any_flag = True
         if sus_sal:
-            flags_html += f'<div class="flag-row"><div class="flag-icon">🟡</div><div><div>Suspicious salary: {salary_range}</div></div></div>'
+            flags_html += f'<div class="flag-row"><div class="flag-icon">◦</div><div><div>Suspicious salary: {salary_range}</div></div></div>'
             any_flag = True
         if not any_flag:
-            flags_html = '<div style="color:#4ade80;font-size:0.82rem;">✅ No rule-based flags raised</div>'
-        st.markdown(flags_html, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+            flags_html = '<div style="color:#9090a8;font-size:0.82rem;">✓ No rule-based flags raised</div>'
+
+        st.markdown(f'<div class="trace-box">{flags_html}</div>', unsafe_allow_html=True)
 
         st.markdown(f"""
 <div class="trace-box" style="margin-top:0.75rem;">
@@ -855,13 +985,13 @@ LR captures textual/semantic signals but has no visibility into structural signa
 
     with st.expander("✅ Defensive Checklist"):
         items = [
-            ("Verify company on MCA21 / LinkedIn",     "Official registration eliminates ghost companies"),
-            ("Confirm official domain email",           "Legit companies don't use Gmail/Yahoo for hiring"),
-            ("Cross-check salary on Glassdoor/Naukri", "Compare claimed CTC with market rates"),
-            ("Never pay upfront fees",                  "No legitimate employer charges registration fees"),
-            ("Don't share Aadhaar/PAN early",           "Only after receiving a formal offer letter"),
-            ("Google: [company] + scam/fraud",          "Many scam companies have reported complaints"),
-            ("Verify recruiter on LinkedIn",            "Check profile age, connections, endorsements"),
+            ("Verify company on MCA21 / LinkedIn",      "Official registration eliminates ghost companies"),
+            ("Confirm official domain email",            "Legit companies don't use Gmail/Yahoo for hiring"),
+            ("Cross-check salary on Glassdoor/Naukri",  "Compare claimed CTC with market rates"),
+            ("Never pay upfront fees",                   "No legitimate employer charges registration fees"),
+            ("Don't share Aadhaar/PAN early",            "Only after receiving a formal offer letter"),
+            ("Google: [company] + scam/fraud",           "Many scam companies have reported complaints"),
+            ("Verify recruiter on LinkedIn",             "Check profile age, connections, endorsements"),
         ]
         for i, (title, detail) in enumerate(items, 1):
             st.markdown(f"""
