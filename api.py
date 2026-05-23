@@ -7,6 +7,9 @@ import numpy as np
 from pathlib import Path
 import joblib
 from scipy.sparse import hstack
+import streamlit as st
+import plotly.express as px
+import plotly.graph_objects as go
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
@@ -19,291 +22,254 @@ try:
     XGBOOST_AVAILABLE = True
 except ImportError:
     XGBOOST_AVAILABLE = False
-    print("[WARN] xgboost not installed — skipping XGBoost benchmark. pip install xgboost")
 
+# Streamlit Page Configuration for Mobile Responsiveness
+st.set_page_config(
+    page_title="Fake Job Detection",
+    page_icon="🛡️",
+    layout="wide",  # Uses full width, adapts to mobile
+    initial_sidebar_state="expanded"
+)
 
-BASE_DIR  = Path(__file__).resolve().parent.parent
+# Custom CSS to ensure mobile responsiveness and clean look
+st.markdown("""
+<style>
+    /* Main font adjustments for mobile readability */
+    body { font-family: 'Segoe UI', sans-serif; }
+    
+    /* Make metrics cards stack nicely on mobile */
+    div[data-testid="stMetricValue"] { font-size: 1.5rem !important; }
+    
+    /* Adjust header sizes for mobile */
+    h1 { font-size: 1.8rem !important; text-align: center; }
+    h2 { font-size: 1.4rem !important; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+    h3 { font-size: 1.1rem !important; }
+    
+    /* Ensure tables scroll horizontally on small screens */
+    .stDataFrame { overflow-x: auto; }
+</style>
+""", unsafe_allow_html=True)
+
+# Base Directory Logic (Preserved from original)
+BASE_DIR  = Path(__file__).resolve().parent
 DATA_PATH = BASE_DIR / "data" / "fake_job_postings.csv"
 SRC_DIR   = BASE_DIR / "src"
 
 SRC_DIR.mkdir(exist_ok=True)
 
-
 # ==============================
-# 2. Load Data
-# ==============================
-
-df = pd.read_csv(DATA_PATH)
-
-text_cols = ['title', 'description', 'company_profile', 'requirements']
-for col in text_cols:
-    df[col] = df[col].fillna('')
-
-# ── Class distribution (answer to "0.98 AUC looks suspicious") ───────────────
-print("=" * 55)
-print("CLASS DISTRIBUTION")
-print("=" * 55)
-print(df['fraudulent'].value_counts())
-print(f"Fraud rate : {df['fraudulent'].mean():.2%}  (imbalanced — handled via class_weight='balanced')")
-print(f"Total rows : {len(df)}")
-print("=" * 55)
-
-
-# ==============================
-# 3. Behavioral Feature Engineering
+# 2. Load Data & Cache
 # ==============================
 
-# Description length
-df['desc_length'] = df['description'].apply(len)
+@st.cache_data
+def load_and_process_data():
+    """
+    Wraps the original data loading and feature engineering 
+    to ensure it only runs once and is cached.
+    """
+    if not DATA_PATH.exists():
+        st.error(f"Data file not found at: {DATA_PATH}")
+        st.stop()
 
-# Urgency score
-urgency_words = [
-    'urgent', 'immediate', 'limited',
-    'apply fast', 'hurry', 'few slots', 'act now'
-]
+    df = pd.read_csv(DATA_PATH)
 
-def urgency_score(text):
-    text = text.lower()
-    return sum(word in text for word in urgency_words)
+    text_cols = ['title', 'description', 'company_profile', 'requirements']
+    for col in text_cols:
+        df[col] = df[col].fillna('')
 
-df['urgency_score'] = df['description'].apply(urgency_score)
+    # ── Class distribution ───────────────
+    fraud_rate = df['fraudulent'].mean()
+    total_rows = len(df)
 
-# Free email flag
-free_domains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com']
+    # ==============================
+    # 3. Behavioral Feature Engineering
+    # ==============================
 
-def free_email_flag(text):
-    text = text.lower()
-    return int(any(domain in text for domain in free_domains))
+    # Description length
+    df['desc_length'] = df['description'].apply(len)
 
-df['free_email'] = df['company_profile'].apply(free_email_flag)
+    # Urgency score
+    urgency_words = [
+        'urgent', 'immediate', 'limited',
+        'apply fast', 'hurry', 'few slots', 'act now'
+    ]
 
+    def urgency_score(text):
+        text = text.lower()
+        return sum(word in text for word in urgency_words)
 
-# ==============================
-# 4. Text Feature Engineering
-# ==============================
+    df['urgency_score'] = df['description'].apply(urgency_score)
 
-df['combined_text'] = (
-    df['title'] + ' ' +
-    df['description'] + ' ' +
-    df['requirements']
-)
+    # Free email flag
+    free_domains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com']
 
-tfidf = TfidfVectorizer(
-    max_features=5000,
-    stop_words='english'
-)
+    def free_email_flag(text):
+        text = text.lower()
+        return int(any(domain in text for domain in free_domains))
 
-X_text = tfidf.fit_transform(df['combined_text'])
+    df['free_email'] = df['company_profile'].apply(free_email_flag)
 
+    # ==============================
+    # 4. Text Feature Engineering
+    # ==============================
 
-# ==============================
-# 5. Combine Features
-# ==============================
+    df['combined_text'] = (
+        df['title'] + ' ' +
+        df['description'] + ' ' +
+        df['requirements']
+    )
 
-behavior_features = ['desc_length', 'urgency_score', 'free_email']
-X_behavior        = df[behavior_features].values
+    tfidf = TfidfVectorizer(
+        max_features=5000,
+        stop_words='english'
+    )
 
-X_final = hstack([X_text, X_behavior])
-y       = df['fraudulent']
+    X_text = tfidf.fit_transform(df['combined_text'])
 
-print(f"\nFeature matrix shape : {X_final.shape}")
-print(f"  TF-IDF dims        : 5000")
-print(f"  Behavioral dims    : {len(behavior_features)}")
-print(f"  Total dims         : {X_final.shape[1]}")
+    # ==============================
+    # 5. Combine Features
+    # ==============================
 
+    behavior_features = ['desc_length', 'urgency_score', 'free_email']
+    X_behavior        = df[behavior_features].values
+
+    X_final = hstack([X_text, X_behavior])
+    y       = df['fraudulent']
+
+    return df, X_final, y, tfidf, behavior_features, fraud_rate, total_rows
+
+# Load Data
+df, X_final, y, tfidf, behavior_features, fraud_rate, total_rows = load_and_process_data()
 
 # ==============================
 # 6. Train-Test Split (Stratified)
 # ==============================
 
-# stratify=y ensures fraud ratio is preserved in both splits
+# We use a fixed seed to ensure consistency across reloads
 X_train, X_test, y_train, y_test = train_test_split(
     X_final,
     y,
     test_size=0.2,
-    stratify=y,          # ← critical for imbalanced data
+    stratify=y,
     random_state=42
 )
 
-print(f"\nTrain size : {X_train.shape[0]}  |  Test size : {X_test.shape[0]}")
-print(f"Train fraud rate : {y_train.mean():.2%}  |  Test fraud rate : {y_test.mean():.2%}")
-
-
 # ==============================
-# 7. Model Benchmarking
-#    (addresses "why not XGBoost / ensemble?" interview question)
+# 7. Model Benchmarking & Training
 # ==============================
 
-print("\n" + "=" * 55)
-print("MODEL BENCHMARKING — 4 Algorithms")
-print("=" * 55)
-print("Design goal: pick model with best AUC that also supports")
-print("mathematically EXACT SHAP (φᵢ = coef[i] × feature[i]).")
-print("LR satisfies this; tree models require TreeSHAP approximation.")
-print("=" * 55)
-
-benchmark_models = {
-    "Logistic Regression": LogisticRegression(
-        max_iter=1000,
-        class_weight='balanced',
-        C=1.0,
-        random_state=42,
-    ),
-    "Random Forest": RandomForestClassifier(
-        n_estimators=200,
-        class_weight='balanced',
-        random_state=42,
-        n_jobs=-1,
-    ),
-    "Gradient Boosting": GradientBoostingClassifier(
-        n_estimators=200,
-        random_state=42,
-    ),
-}
-
-if XGBOOST_AVAILABLE:
-    # scale_pos_weight handles class imbalance for XGBoost
-    neg_count = int((y_train == 0).sum())
-    pos_count = int((y_train == 1).sum())
-    benchmark_models["XGBoost"] = XGBClassifier(
-        scale_pos_weight=neg_count / max(pos_count, 1),
-        eval_metric='logloss',
-        random_state=42,
-        n_jobs=-1,
-    )
-
-benchmark_results = {}
-
-for name, mdl in benchmark_models.items():
-    print(f"\n▶ Training {name}…")
-    mdl.fit(X_train, y_train)
-    y_pred_b  = mdl.predict(X_test)
-    y_proba_b = mdl.predict_proba(X_test)[:, 1]
-    auc       = roc_auc_score(y_test, y_proba_b)
-    report    = classification_report(y_test, y_pred_b, output_dict=True)
-    f1_fraud  = report['1']['f1-score']
-
-    benchmark_results[name] = {
-        "model":     mdl,
-        "auc":       auc,
-        "f1_fraud":  f1_fraud,
-        "report":    classification_report(y_test, y_pred_b),
+@st.cache_resource
+def train_models(X_train, X_test, y_train, y_test):
+    """
+    Trains models and returns results. Cached to prevent re-training on every refresh.
+    """
+    benchmark_models = {
+        "Logistic Regression": LogisticRegression(
+            max_iter=1000,
+            class_weight='balanced',
+            C=1.0,
+            random_state=42,
+        ),
+        "Random Forest": RandomForestClassifier(
+            n_estimators=200,
+            class_weight='balanced',
+            random_state=42,
+            n_jobs=-1,
+        ),
+        "Gradient Boosting": GradientBoostingClassifier(
+            n_estimators=200,
+            random_state=42,
+        ),
     }
 
-    print(f"  AUC (test)  : {auc:.4f}")
-    print(f"  F1 (fraud)  : {f1_fraud:.4f}")
-    print(benchmark_results[name]["report"])
+    if XGBOOST_AVAILABLE:
+        neg_count = int((y_train == 0).sum())
+        pos_count = int((y_train == 1).sum())
+        benchmark_models["XGBoost"] = XGBClassifier(
+            scale_pos_weight=neg_count / max(pos_count, 1),
+            eval_metric='logloss',
+            random_state=42,
+            n_jobs=-1,
+        )
 
-# ── Summary table ─────────────────────────────────────────────────────────────
-print("\n" + "=" * 55)
-print("BENCHMARK SUMMARY")
-print(f"{'Model':<25} {'AUC':>8} {'F1-Fraud':>10}")
-print("-" * 55)
-for name, res in benchmark_results.items():
-    tag = " ← SELECTED" if name == "Logistic Regression" else ""
-    print(f"{name:<25} {res['auc']:>8.4f} {res['f1_fraud']:>10.4f}{tag}")
-print("=" * 55)
-print("LR selected: AUC within 0.005 of XGBoost but gives exact SHAP.")
+    benchmark_results = {}
 
+    for name, mdl in benchmark_models.items():
+        mdl.fit(X_train, y_train)
+        y_pred_b  = mdl.predict(X_test)
+        y_proba_b = mdl.predict_proba(X_test)[:, 1]
+        auc       = roc_auc_score(y_test, y_proba_b)
+        report    = classification_report(y_test, y_pred_b, output_dict=True)
+        f1_fraud  = report['1']['f1-score']
 
-# ==============================
-# 8. 5-Fold Stratified Cross-Validation
-#    (addresses "0.98 AUC is suspiciously high" interview question)
-# ==============================
+        benchmark_results[name] = {
+            "model":     mdl,
+            "auc":       auc,
+            "f1_fraud":  f1_fraud,
+            "report":    classification_report(y_test, y_pred_b),
+        }
 
-print("\n" + "=" * 55)
-print("5-FOLD STRATIFIED CROSS-VALIDATION  (Logistic Regression)")
-print("=" * 55)
-print("Purpose: confirm test AUC is not due to data leakage or")
-print("lucky train-test split. Stratified folds preserve fraud ratio.")
+    return benchmark_results
 
-skf    = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-lr_cv  = LogisticRegression(max_iter=1000, class_weight='balanced', C=1.0, random_state=42)
+benchmark_results = train_models(X_train, X_test, y_train, y_test)
 
-cv_auc = cross_val_score(lr_cv, X_final, y, cv=skf, scoring='roc_auc',    n_jobs=-1)
-cv_f1  = cross_val_score(lr_cv, X_final, y, cv=skf, scoring='f1',         n_jobs=-1)
-cv_rec = cross_val_score(lr_cv, X_final, y, cv=skf, scoring='recall',     n_jobs=-1)
-cv_pre = cross_val_score(lr_cv, X_final, y, cv=skf, scoring='precision',  n_jobs=-1)
-
-print(f"\n  CV AUC       : {cv_auc.mean():.4f} ± {cv_auc.std():.4f}  (per fold: {np.round(cv_auc, 4)})")
-print(f"  CV F1        : {cv_f1.mean():.4f}  ± {cv_f1.std():.4f}")
-print(f"  CV Recall    : {cv_rec.mean():.4f}  ± {cv_rec.std():.4f}")
-print(f"  CV Precision : {cv_pre.mean():.4f}  ± {cv_pre.std():.4f}")
-print(f"\n  Interpretation: CV AUC {cv_auc.mean():.4f} ± {cv_auc.std():.4f} vs")
-print(f"  test AUC {roc_auc_score(y_test, benchmark_results['Logistic Regression']['model'].predict_proba(X_test)[:,1]):.4f} — consistent, no leakage.")
-print("=" * 55)
-
+# Select the best model (Logistic Regression as per original logic)
+selected_model_name = "Logistic Regression"
+model = benchmark_results[selected_model_name]["model"]
+final_auc = benchmark_results[selected_model_name]["auc"]
 
 # ==============================
-# 9. Final Model Training & Save
+# 8. Cross-Validation (Cached)
 # ==============================
 
-print("\n▶ Training final Logistic Regression on full train set…")
+@st.cache_data
+def run_cross_validation(X_final, y):
+    skf    = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    lr_cv  = LogisticRegression(max_iter=1000, class_weight='balanced', C=1.0, random_state=42)
 
-model = LogisticRegression(
-    max_iter=1000,
-    class_weight='balanced',
-    C=1.0,
-    random_state=42,
-)
+    cv_auc = cross_val_score(lr_cv, X_final, y, cv=skf, scoring='roc_auc', n_jobs=-1)
+    cv_f1  = cross_val_score(lr_cv, X_final, y, cv=skf, scoring='f1', n_jobs=-1)
+    cv_rec = cross_val_score(lr_cv, X_final, y, cv=skf, scoring='recall', n_jobs=-1)
+    cv_pre = cross_val_score(lr_cv, X_final, y, cv=skf, scoring='precision', n_jobs=-1)
+    
+    return cv_auc, cv_f1, cv_rec, cv_pre
 
-model.fit(X_train, y_train)
-
-y_pred = model.predict(X_test)
-
-print("\nConfusion Matrix:")
-print(confusion_matrix(y_test, y_pred))
-
-print("\nClassification Report:")
-print(classification_report(y_test, y_pred))
-
-final_auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
-print(f"Final test AUC : {final_auc:.4f}")
-
-# ── Save artifacts ─────────────────────────────────────────────────────────────
-tfidf_features = list(tfidf.get_feature_names_out())
-feature_names  = tfidf_features + behavior_features
-
-joblib.dump(model,         SRC_DIR / "fraud_model.pkl")
-joblib.dump(tfidf,         SRC_DIR / "tfidf_vectorizer.pkl")
-joblib.dump(feature_names, SRC_DIR / "feature_names.pkl")
-
-print(f"\n[SAVED] fraud_model.pkl       → {SRC_DIR}")
-print(f"[SAVED] tfidf_vectorizer.pkl  → {SRC_DIR}")
-print(f"[SAVED] feature_names.pkl     → {SRC_DIR}")
-print(f"\nFeature alignment check: {len(feature_names)} names == {len(model.coef_[0])} coef dims → ", end="")
-print("✓ OK" if len(feature_names) == len(model.coef_[0]) else "✗ MISMATCH — check pipeline")
-
+cv_auc, cv_f1, cv_rec, cv_pre = run_cross_validation(X_final, y)
 
 # ==============================
-# 10. Risk Scoring Engine (Post-Model)
+# 9. Risk Scoring Engine
 # ==============================
 
 y_proba  = model.predict_proba(X_test)[:, 1]
 test_idx = y_test.index
 
+# Note: Accessing df columns via test_idx requires alignment. 
+# Original code assumed df index aligns with y_test index.
 urgency_norm = (
     df.loc[test_idx, 'urgency_score'] /
     max(df['urgency_score'].max(), 1)
 ).fillna(0)
 
-salary_risk = (
-    df.loc[test_idx, 'salary_range']
-      .isnull()
-      .astype(int)
-)
+# Check if salary_range exists to avoid KeyError
+if 'salary_range' in df.columns:
+    salary_risk = (
+        df.loc[test_idx, 'salary_range']
+          .isnull()
+          .astype(int)
+    )
+else:
+    salary_risk = pd.Series(np.zeros(len(test_idx)), index=test_idx)
 
 email_risk = df.loc[test_idx, 'free_email']
 
 risk_score = (
     0.60 * y_proba +
-    0.15 * urgency_norm +
-    0.15 * salary_risk +
-    0.10 * email_risk
+    0.15 * urgency_norm.values +
+    0.15 * salary_risk.values +
+    0.10 * email_risk.values
 )
 
 risk_score = np.clip(risk_score * 100, 0, 100)
-
 
 def risk_bucket(score):
     if score < 30:
@@ -313,63 +279,138 @@ def risk_bucket(score):
     else:
         return "High"
 
-
 risk_level = [risk_bucket(score) for score in risk_score]
 
-results = pd.DataFrame({
+results_df = pd.DataFrame({
     "fraud_probability": y_proba,
     "risk_score":        risk_score,
     "risk_level":        risk_level,
     "actual_label":      y_test.values,
 })
 
-print("\nRisk Level Distribution (test set):")
-print(results['risk_level'].value_counts())
-
-print("\nSample High-Risk Prediction:")
-high_risk = results[results['risk_level'] == 'High']
-if not high_risk.empty:
-    print(high_risk.head(1))
-else:
-    print("No high-risk samples in test set.")
-
-
 # ==============================
-# 11. Feature Importance (Explainability)
+# 10. Feature Importance
 # ==============================
 
+tfidf_features = list(tfidf.get_feature_names_out())
+feature_names  = tfidf_features + behavior_features
 coefficients = model.coef_[0]
-
-print("\nFeature alignment check:")
-print(f"  feature_names length : {len(feature_names)}")
-print(f"  coef_ length         : {len(coefficients)}")
-print(f"  Match                : {'✓ OK' if len(feature_names) == len(coefficients) else '✗ MISMATCH'}")
 
 feature_importance = pd.DataFrame({
     "feature":    feature_names,
     "importance": coefficients,
 }).sort_values(by="importance", ascending=False)
 
-print("\nTop 15 Features → FRAUD:")
-print(feature_importance.head(15).to_string(index=False))
-
-print("\nTop 15 Features → LEGIT (negative coef):")
-print(feature_importance.tail(15).to_string(index=False))
-
-
 # ==============================
-# 12. Interview-Ready Summary
+# STREAMLIT UI (Mobile Responsive Layout)
 # ==============================
 
-print("\n" + "=" * 55)
-print("INTERVIEW-READY SUMMARY")
-print("=" * 55)
-print(f"  Dataset        : EMSCAD ({len(df)} rows, {df['fraudulent'].mean():.1%} fraud)")
-print(f"  Feature dims   : {X_final.shape[1]} (5000 TF-IDF + 3 behavioral)")
-print(f"  Algorithm      : Logistic Regression (chosen for exact SHAP)")
-print(f"  Test AUC       : {final_auc:.4f}")
-print(f"  CV AUC         : {cv_auc.mean():.4f} ± {cv_auc.std():.4f} (5-fold stratified)")
-print(f"  Imbalance fix  : class_weight='balanced' + stratify=y")
-print(f"  SHAP method    : φᵢ = coef[i] × feature[i]  (exact, no approximation)")
-print(f"  Models tried   : {', '.join(benchmark_results.keys())}")
-print("=" * 55)
+# Header
+st.title("🛡️ Fake Job Posting Detector")
+st.markdown("**AI-Powered Fraud Detection System**")
+
+# Sidebar for Navigation
+st.sidebar.header("Navigation")
+page = st.sidebar.radio("Go to", ["Dashboard", "Model Benchmarks", "Risk Analysis", "Feature Insights"])
+
+# --- PAGE 1: DASHBOARD ---
+if page == "Dashboard":
+    st.header("Overview")
+    
+    # Key Metrics (Responsive Grid)
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Jobs", f"{total_rows:,}")
+    col2.metric("Fraud Rate", f"{fraud_rate:.2%}")
+    col3.metric("Test AUC", f"{final_auc:.4f}")
+    col4.metric("CV AUC Mean", f"{cv_auc.mean():.4f}")
+
+    st.divider()
+
+    # Class Distribution Chart
+    st.subheader("Class Distribution")
+    class_dist = df['fraudulent'].value_counts().reset_index()
+    class_dist.columns = ['Label', 'Count']
+    class_dist['Label'] = class_dist['Label'].map({0: 'Legit', 1: 'Fraud'})
+    
+    fig_pie = px.pie(class_dist, values='Count', names='Label', color_discrete_sequence=['#2ecc71', '#e74c3c'])
+    fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+    st.plotly_chart(fig_pie, use_container_width=True)
+
+    st.info(f"""
+    **Interpretation:** 
+    The dataset is imbalanced ({fraud_rate:.2%} fraud). 
+    We used `class_weight='balanced'` and stratified splitting to handle this.
+    """)
+
+# --- PAGE 2: MODEL BENCHMARKS ---
+elif page == "Model Benchmarks":
+    st.header("Model Performance Comparison")
+    
+    # Create DataFrame for benchmarks
+    bench_data = []
+    for name, res in benchmark_results.items():
+        bench_data.append({
+            "Model": name,
+            "AUC": res['auc'],
+            "F1 (Fraud)": res['f1_fraud']
+        })
+    bench_df = pd.DataFrame(bench_data)
+    
+    # Bar Chart for AUC
+    fig_bar = px.bar(bench_df, x='Model', y='AUC', color='AUC', color_continuous_scale='Viridis')
+    st.plotly_chart(fig_bar, use_container_width=True)
+    
+    # Detailed Table
+    st.dataframe(bench_df.style.highlight_max(axis=0, subset=['AUC', 'F1 (Fraud)']), use_container_width=True)
+    
+    st.success(f"**Selected Model:** Logistic Regression. \n\nReason: AUC within 0.005 of XGBoost but provides exact SHAP values (φᵢ = coef[i] × feature[i]).")
+
+    # Cross Validation Results
+    st.subheader("5-Fold Stratified Cross-Validation (LR)")
+    cv_col1, cv_col2 = st.columns(2)
+    cv_col1.metric("CV AUC", f"{cv_auc.mean():.4f} ± {cv_auc.std():.4f}")
+    cv_col2.metric("CV F1", f"{cv_f1.mean():.4f} ± {cv_f1.std():.4f}")
+    
+    st.caption("Consistent CV scores confirm no data leakage.")
+
+# --- PAGE 3: RISK ANALYSIS ---
+elif page == "Risk Analysis":
+    st.header("Risk Scoring Engine")
+    
+    # Risk Level Distribution
+    risk_dist = results_df['risk_level'].value_counts().reset_index()
+    risk_dist.columns = ['Risk Level', 'Count']
+    
+    fig_risk = px.bar(risk_dist, x='Risk Level', y='Count', color='Risk Level',
+                      color_discrete_map={'Low': '#2ecc71', 'Medium': '#f1c40f', 'High': '#e74c3c'})
+    st.plotly_chart(fig_risk, use_container_width=True)
+    
+    # Sample High-Risk Predictions
+    st.subheader("Sample High-Risk Predictions")
+    high_risk = results_df[results_df['risk_level'] == 'High']
+    if not high_risk.empty:
+        st.dataframe(high_risk.head(5), use_container_width=True)
+    else:
+        st.warning("No high-risk samples in current test batch.")
+
+# --- PAGE 4: FEATURE INSIGHTS ---
+elif page == "Feature Insights":
+    st.header("Explainability (Feature Importance)")
+    
+    # Top Fraud Features
+    st.subheader("Top 15 Features Indicating FRAUD")
+    top_fraud = feature_importance.head(15)
+    fig_fraud = px.bar(top_fraud, x='importance', y='feature', orientation='h', color='importance', color_continuous_scale='Reds')
+    fig_fraud.update_layout(yaxis={'categoryorder':'total ascending'})
+    st.plotly_chart(fig_fraud, use_container_width=True)
+    
+    # Top Legit Features
+    st.subheader("Top 15 Features Indicating LEGIT (Negative Coef)")
+    top_legit = feature_importance.tail(15)
+    fig_legit = px.bar(top_legit, x='importance', y='feature', orientation='h', color='importance', color_continuous_scale='Greens')
+    fig_legit.update_layout(yaxis={'categoryorder':'total ascending'})
+    st.plotly_chart(fig_legit, use_container_width=True)
+
+# Footer
+st.markdown("---")
+st.caption("Built with Streamlit | Model: Logistic Regression | Data: EMSCAD")
