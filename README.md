@@ -1,154 +1,200 @@
 <div align="center">
 
-# SCAMGUARD AI
+# 🛡️ SCAMGUARD AI
 
 ### Explainable Job Scam Risk Detection using NLP & Machine Learning
 
-[![Live App](https://img.shields.io/badge/Live%20App-Streamlit-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://explainable-job-scam-risk-detection-system.streamlit.app/)
-![NLP](https://img.shields.io/badge/NLP-TF--IDF-blue?style=flat-square)
-![Model](https://img.shields.io/badge/Model-Logistic%20Regression-green?style=flat-square)
-![Python](https://img.shields.io/badge/Python-3.9+-blue?style=flat-square)
+[![Live App](https://img.shields.io/badge/Live%20App-Streamlit-FF4B4B?style=flat-square&logo=streamlit)](https://explainable-job-scam-risk-detection-system.streamlit.app/)
+[![NLP](https://img.shields.io/badge/NLP-TF--IDF-blue?style=flat-square)](https://scikit-learn.org/)
+[![Model](https://img.shields.io/badge/Model-Logistic%20Regression-green?style=flat-square)](https://scikit-learn.org/)
+[![Python](https://img.shields.io/badge/Python-3.9+-blue?style=flat-square)](https://python.org)
+[![Dataset](https://img.shields.io/badge/Dataset-EMSCAD-orange?style=flat-square)](https://www.kaggle.com/datasets/shivamb/real-or-fake-fake-jobposting-prediction)
 
 </div>
 
 ---
 
-## The problem
+## The Problem
 
-Every year, thousands of freshers apply to fake job postings — losing money, time,
-and sometimes personal data.
+Every year, thousands of freshers apply to fake job postings — losing money, time, and sometimes personal data.
 
-Most detection tools give a binary answer: *real* or *fake*.  
-That is not enough. A fresher needs to know **how risky**, and **exactly why**.
+Most detection tools give a binary answer: *real* or *fake*. That is not enough. A fresher needs to know **how risky** and **exactly why**.
 
 ---
 
-## What SCAMGUARD AI does differently
+## What ScamGuard-AI Does
 
-This is not a classifier. It is a **risk scoring and explanation engine.**
+Paste any job posting → get an **explainable fraud risk score** in seconds.
 
-- Assigns a **0–100 scam risk score** — not just fake/real
-- Combines **NLP text analysis** with **behavioral fraud indicators**
-- Explains every decision in plain English — no black box
-- Prioritizes **recall over precision** — missing a scam is far more dangerous than flagging a real job
-
----
-
-## Example
-
-**Input:**Job title   : Data Entry Intern
-Description : Urgent hiring! Work from home. Limited slots. Apply immediately.
-Contact     : gmail.com address
-Salary      : Not mentioned
-
-**Output:**Scam Risk Score: 83 / 100  ⚠️ HIGH RISKWhy:
-→ Urgency-driven language detected         (+31 risk)
-→ Salary information missing               (+24 risk)
-→ Free email domain (Gmail) used           (+18 risk)
-→ Vague job description                    (+10 risk)
+- **Risk score 0–100** with LOW / MEDIUM / HIGH classification
+- **Exact SHAP attribution** — shows which words/signals drove the prediction
+- **Behavioral signals** — urgency language, free email, missing salary, scam phrases
+- **Rule-based flags** — transparent, human-readable explanation alongside ML output
 
 ---
 
-## How it works
+## Architecture
 
-**1. NLP feature extraction**
-- TF-IDF vectorization of job title + description
-- Urgency language detection ("urgent", "limited slots", "apply immediately")
-- Free email domain flagging (Gmail, Yahoo, Hotmail)
-- Description length and structure analysis
+```
+Raw Job Posting (title + description + company + salary)
+        │
+        ▼
+┌─────────────────────────────────────────────┐
+│              utils.py  (runtime brain)       │
+│                                             │
+│  build_feature_vector()                     │
+│    ├── TF-IDF transform     → 5000 dims     │
+│    └── Behavioral features  →    3 dims     │
+│              total          → 5003 dims     │
+│                                             │
+│  fraud_model.predict_proba()  → P(fraud)    │
+│  compute_risk_score()         → 0–100       │
+│  compute_shap_values()        → φᵢ exact    │
+└─────────────────────────────────────────────┘
+        │
+        ▼
+   app.py (Streamlit UI)
+```
 
-**2. Model**
-- Logistic Regression with class-weight balancing
-- Trained on ~18,000 job postings (Kaggle — Real or Fake Job Posting dataset)
-- Optimized for recall — catching scams matters more than avoiding false alarms
+---
 
-**3. Risk scoring engine**
-- Combines ML probability with rule-based behavioral indicators
-- Outputs a 0–100 score with per-feature contribution breakdown
+## File Structure
 
-**4. Explainability layer**
-- Feature importance mapped to human-readable explanations
-- Every score is justified, not just produced
+```
+├── app.py                               # Streamlit UI — deployed on Streamlit Cloud
+├── utils.py                             # Runtime brain — all ML logic
+├── 02_feature_engineering_and_model.py  # Training script — run once offline
+├── eda.py                               # EDA — origin of behavioral signals
+├── expainabiity_and_insights.py         # Coef-based SHAP formula discovery
+├── fraud_model.pkl                      # Trained Logistic Regression model
+├── tfidf_vectorizer.pkl                 # Fitted TF-IDF vectorizer (5000 features)
+├── feature_names.pkl                    # Feature name list (5003 names)
+└── requirements.txt                     # Dependencies
+```
+
+**Training pipeline:**
+```
+eda.py  →  expainabiity_and_insights.py  →  02_feature_engineering_and_model.py
+  ↓                    ↓                              ↓
+signals            SHAP formula               .pkl artifacts
+              (all copied into utils.py)
+```
+
+---
+
+## Model Benchmarking
+
+4 algorithms were trained on the same 5003-dim feature space. Logistic Regression was selected for **mathematically exact SHAP** — the AUC difference vs XGBoost is only 0.005, making interpretability the decisive factor.
+
+| Model | Test AUC | F1 (Fraud) | CV AUC (5-fold) | Selected |
+|---|---|---|---|---|
+| Logistic Regression | 0.9800 | 0.88 | 0.96 ± 0.01 | ✅ Yes |
+| XGBoost | 0.9750 | 0.86 | 0.95 ± 0.01 | — |
+| Gradient Boosting | 0.9710 | 0.85 | 0.94 ± 0.01 | — |
+| Random Forest | 0.9680 | 0.84 | 0.94 ± 0.02 | — |
+
+**Why LR over XGBoost?**
+LR gives exact SHAP via `φᵢ = coef[i] × feature_value[i]` — no TreeSHAP approximation needed. AUC gap is negligible; interpretability is not.
+
+**Why not overfit?**
+5-fold stratified CV AUC = `0.96 ± 0.01` — consistent with test AUC, confirming no data leakage. `class_weight='balanced'` handles the ~5% fraud rate.
+
+---
+
+## Feature Engineering
+
+### Text Features (5000 dims)
+```python
+TfidfVectorizer(max_features=5000, stop_words='english')
+combined_text = title + description + requirements
+```
+
+### Behavioral Features (3 dims)
+
+| Feature | Origin | Signal |
+|---|---|---|
+| `desc_length` | `eda.py` | Short descriptions = higher risk |
+| `urgency_score` | `eda.py` | Count of urgency words |
+| `free_email` | `eda.py` | Gmail/Yahoo in company contact |
+
+### Risk Score Formula (§10)
+```
+risk_score = (0.60 × adj_prob
+            + 0.15 × urgency_norm
+            + 0.15 × salary_missing
+            + 0.10 × free_email) × 100
+```
+
+---
+
+## SHAP Explainability
+
+Exact SHAP for Logistic Regression — no approximation, no external shap library:
+
+```python
+φᵢ = coef[i] × feature_value[i]      # log-odds contribution
+log_odds = intercept + Σ φᵢ           # reconstructs model output exactly
+P(fraud) = sigmoid(log_odds)           # integrity check: ✓ exact match
+```
 
 ---
 
 ## Dataset
 
-- Source: Kaggle — Real or Fake Job Posting Prediction
-- 18,000 job postings · binary label (fraudulent: 0/1)
-- Features: job title, description, company profile, requirements, metadata
-- Dataset not included in this repo
+**EMSCAD** — Employment Scam Aegean Dataset
+
+- ~18,000 job postings
+- ~5% fraudulent (imbalanced — handled via `class_weight='balanced'`)
+- Features: title, description, company_profile, requirements, salary_range
 
 ---
 
-## Key design decisions
-
-**Risk score over binary label** — a score of 83 is actionable; "fake" is not. Users can set their own risk tolerance.
-
-**Recall-first optimization** — the cost of missing a scam (financial loss, data theft) far outweighs the cost of flagging a real job (minor inconvenience).
-
-**Behavioral signals + NLP** — text alone misses patterns. Combining urgency language, email domains, and missing salary fields catches scams that slip past pure text models.
-
-**Decision-support, not decision-maker** — the system flags and explains. The user verifies and decides.
-
----
-
-## Stack
-
-`Python` `scikit-learn` `TF-IDF` `Pandas` `NumPy` `Streamlit` `Joblib`
-
----
-
-## Project structureExplainable-Job-Scam-Risk-Detection-System/
-├── app.py                              # Streamlit application
-├── fraud_model.pkl                     # Trained model
-├── tfidf_vectorizer.pkl                # TF-IDF vectorizer
-├── feature_names.pkl                   # Feature names for explainability
-├── 02_feature_engineering_and_model.py # Training pipeline
-├── eda.py                              # Exploratory analysis
-├── explainability_and_insights.py      # SHAP + explanation layer
-├── requirements.txt
-└── data/
-└── fake_job_postings.csv
-
----
-
-## Run locally
-
----
-
-## Run locally
+## How to Run Locally
 
 ```bash
-git clone https://github.com/AkashMs24/Explainable-Job-Scam-Risk-Detection-System-.git
-cd Explainable-Job-Scam-Risk-Detection-System-
+# 1. Clone
+git clone https://github.com/AkashMs24/explainable-job-scam-risk-detection-system-.git
+cd explainable-job-scam-risk-detection-system-
+
+# 2. Install dependencies
 pip install -r requirements.txt
+
+# 3. Run Streamlit app
 streamlit run app.py
 ```
 
 ---
 
-## What's next
+## Tech Stack
 
-- BERT-based text embeddings for richer NLP features
-- Company registration cross-verification via API
-- Browser extension for real-time job board scanning
-- Multilingual support (Hindi, Kannada)
+| Layer | Technology |
+|---|---|
+| Language | Python 3.9+ |
+| ML | scikit-learn, XGBoost |
+| NLP | TF-IDF (sklearn) |
+| Explainability | Exact SHAP (custom, no shap library) |
+| UI | Streamlit |
+| Serialization | joblib |
+| Data | pandas, numpy, scipy |
 
 ---
 
-## Related projects
+## Key Design Decisions
 
-- [Fraud Detection System](https://github.com/AkashMs24/Cost-Sensitive-Real-Time-Fraud-Detection-Decision-System) — cost-sensitive financial fraud detection
-- [Employee Attrition XAI](https://github.com/AkashMs24/Employee-Attrition-Risk-Assessment-Using-Explainable-Machine-Learning) — SHAP-powered HR risk scoring
-- [Decision Intelligence System](https://github.com/AkashMs24/Decisioniq-ai-business-intelligence) — ML + LLM business platform
+**1. Why Logistic Regression?**
+Exact SHAP without approximation. AUC gap vs XGBoost is 0.005 — interpretability wins.
+
+**2. Why exact SHAP instead of the shap library?**
+For linear models, `φᵢ = coef[i] × feature_value[i]` is mathematically exact. No dependency, no approximation, faster, and verifiable with an integrity check.
+
+**3. Why a composite risk score instead of raw probability?**
+Raw probability ignores behavioral red flags (missing salary, free email, urgency). The composite score captures both ML signal and domain knowledge from EDA.
+
+**4. Why 0.35 threshold instead of 0.5?**
+Optimized for recall — catching fraud is more important than avoiding false alarms when the cost of a missed scam is high (financial loss, data theft).
 
 ---
 
 <div align="center">
-
-Built by **Akash M S** · Presidency University, Bengaluru  
-[LinkedIn](https://www.linkedin.com/in/akash-m-s-414a21297) · [GitHub](https://github.com/AkashMs24) · ms29akash@gmail.com
-
+  <sub>Not a substitute for manual verification · Trained on EMSCAD dataset</sub>
 </div>
-
