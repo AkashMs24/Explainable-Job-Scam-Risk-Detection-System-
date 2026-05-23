@@ -1,12 +1,6 @@
 """
-SCAMGUARD-AI  |  app.py  (v7 — Fixed + Model Comparison UI)
-============================================================
-Fixes applied:
-  - ZeroDivisionError in SHAP force plot (max_abs = 0 when all features zero)
-  - Model comparison section added (LR vs XGBoost vs RF vs GB)
-  - Justified LR choice for exact SHAP
-  - Stratified CV results displayed
-  - FastAPI backend note added to UI
+SCAMGUARD-AI  |  app.py  (v8 — FastAPI expander removed)
+=========================================================
 """
 
 import streamlit as st
@@ -370,9 +364,9 @@ BASE_DIR = Path(__file__).resolve().parent
 
 @st.cache_resource(show_spinner="Loading model artifacts…")
 def load_artifacts():
-    model       = joblib.load(BASE_DIR / "fraud_model.pkl")
-    vectorizer  = joblib.load(BASE_DIR / "tfidf_vectorizer.pkl")
-    feat_names  = joblib.load(BASE_DIR / "feature_names.pkl")
+    model      = joblib.load(BASE_DIR / "fraud_model.pkl")
+    vectorizer = joblib.load(BASE_DIR / "tfidf_vectorizer.pkl")
+    feat_names = joblib.load(BASE_DIR / "feature_names.pkl")
     return model, vectorizer, feat_names
 
 fraud_model, tfidf_vectorizer, feature_names = load_artifacts()
@@ -380,7 +374,6 @@ fraud_model, tfidf_vectorizer, feature_names = load_artifacts()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MODEL COMPARISON DATA
-# (populated by 02_feature_engineering_and_mo...py benchmarking section)
 # ═══════════════════════════════════════════════════════════════════════════════
 MODEL_COMPARISON = [
     {"name": "Logistic Regression", "auc": 0.9800, "f1": 0.88, "cv_auc": "0.96 ± 0.01", "selected": True,
@@ -403,7 +396,7 @@ st.markdown("""
     <div class="topbar-icon">🛡️</div>
     <div>
       <div class="topbar-name">ScamGuard-AI</div>
-      <div class="topbar-sub">Explainable Fraud Detection · FastAPI + Streamlit</div>
+      <div class="topbar-sub">Explainable Fraud Detection · Logistic Regression + TF-IDF</div>
     </div>
   </div>
   <div class="status-row">
@@ -417,7 +410,7 @@ st.markdown("""
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <div class="hero">
-  <div class="hero-kicker">◈ Logistic Regression · TF-IDF · Exact SHAP · Behavioral Signals · FastAPI</div>
+  <div class="hero-kicker">◈ Logistic Regression · TF-IDF · Exact SHAP · Behavioral Signals</div>
   <h1 class="hero-title">Job Scam <em>Risk Analyzer</em></h1>
   <p class="hero-desc">
     Paste any job posting. Get an explainable fraud risk score powered by
@@ -444,7 +437,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MODEL COMPARISON SECTION (always visible — interview-ready)
+# ⓪ MODEL BENCHMARKING
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown('<div class="slabel">⓪ Model Benchmarking — Why Logistic Regression?</div>', unsafe_allow_html=True)
 st.markdown(
@@ -849,9 +842,8 @@ if run:
         plt.close()
 
     # ── Inline SHAP force bars ────────────────────────────────────────────────
-    # FIX: guard against max_abs = 0 when all SHAP values are zero
-    max_abs  = max((abs(v) for _, v in shap_top), default=0.0)
-    max_abs  = max_abs if max_abs > 0 else 1.0   # ← ZeroDivisionError fix
+    max_abs = max((abs(v) for _, v in shap_top), default=0.0)
+    max_abs = max_abs if max_abs > 0 else 1.0
 
     bars_html = ""
     for name, val in shap_top:
@@ -1067,29 +1059,6 @@ if run:
             for feat, coef in top15:
                 st.text(f"{feat:<40} {coef:+.4f}")
 
-    with st.expander("🌐  FastAPI Backend — /predict endpoint"):
-        st.markdown("""
-<div class="trace-box">
-<span class="key">endpoint   </span><span class="val">POST /predict</span>
-<span class="key">backend    </span><span class="val">api.py  (FastAPI + uvicorn)</span>
-<span class="key">run        </span><span class="val">uvicorn api:app --reload</span>
-<span class="key">docs       </span><span class="val">http://localhost:8000/docs</span>
-</div>
-""", unsafe_allow_html=True)
-        st.code('''{
-  "title":       "Data Entry Executive",
-  "description": "Work from home, earn 50k/month, no experience needed...",
-  "company":     "contact: recruiter@gmail.com",
-  "salary":      "50000"
-}''', language="json")
-        st.markdown(
-            '<div class="insight" style="margin-top:0.7rem;">'
-            '<b>Response includes:</b> fraud_probability, risk_score, risk_level, '
-            'verdict, advice, top 10 SHAP features, behavioral signals. '
-            'Full schema at <code>/docs</code>.</div>',
-            unsafe_allow_html=True
-        )
-
     with st.expander("✅  Defensive Checklist"):
         items = [
             ("Verify company on MCA21 / LinkedIn",       "Official registration eliminates ghost companies"),
@@ -1122,7 +1091,6 @@ st.markdown(f"""
   5-Fold CV AUC: <b>0.96 ± 0.01</b> &nbsp;·&nbsp;
   Trained on EMSCAD dataset &nbsp;·&nbsp;
   Exact SHAP via <b>utils.compute_shap_values()</b> &nbsp;·&nbsp;
-  REST API: <b>api.py</b> &nbsp;·&nbsp;
   Not a substitute for manual verification
 </div>
 """, unsafe_allow_html=True)
