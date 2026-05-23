@@ -12,8 +12,17 @@ import joblib
 from pathlib import Path
 
 # ── Local module imports ─────────────────────────────────────────────────────
-from utils import risk_bucket, compute_risk_scores
-from expainability_and_insights import get_feature_importance, get_shap_values
+from utils import (
+    build_feature_vector,
+    compute_risk_score,
+    get_risk_level,
+    get_feature_importance,
+    compute_shap_values,
+    top_shap_features,
+    top_driver,
+    matched_scam_phrases,
+    FRAUD_THRESHOLD,
+)
 
 # ==============================
 # PAGE CONFIG
@@ -522,10 +531,28 @@ elif page == "⚠️ Risk Analysis":
     """, unsafe_allow_html=True)
 
     try:
-        results_df = compute_risk_scores(df, model, tfidf)
+        records = []
+        sample = df.sample(min(500, len(df)), random_state=42)
+        for _, row in sample.iterrows():
+            X, fd = build_feature_vector(
+                tfidf,
+                row.get('title', ''),
+                row.get('description', ''),
+                row.get('company_profile', ''),
+                row.get('salary_range', ''),
+            )
+            prob  = model.predict_proba(X)[0][1]
+            score = compute_risk_score(prob, fd)
+            level, _, _, _, _ = get_risk_level(score)
+            records.append({
+                "fraud_probability": round(prob, 4),
+                "risk_score":        score,
+                "risk_level":        level,
+                "actual_label":      row.get('fraudulent', -1),
+            })
+        results_df = pd.DataFrame(records)
     except Exception as e:
         st.error(f"Error computing risk scores: {e}")
-        st.info("Ensure `compute_risk_scores` is implemented in `utils.py`.")
         st.stop()
 
     # ── Risk Distribution ─────────────────────────────────────────────────
@@ -535,7 +562,7 @@ elif page == "⚠️ Risk Analysis":
     col_l, col_r = st.columns([1, 1.4], gap="large")
 
     with col_l:
-        color_map = {'Low': '#00e676', 'Medium': '#ffc400', 'High': '#ff4d4d'}
+        color_map = {'LOW': '#00e676', 'MEDIUM': '#ffc400', 'HIGH': '#ff4d4d'}
         fig_donut = go.Figure(go.Pie(
             labels=risk_dist['Risk Level'],
             values=risk_dist['Count'],
@@ -563,7 +590,7 @@ elif page == "⚠️ Risk Analysis":
 
     # ── High Risk Samples ─────────────────────────────────────────────────
     st.subheader("⚠️ High-Risk Listings")
-    high_risk = results_df[results_df['risk_level'] == 'High'].head(10)
+    high_risk = results_df[results_df['risk_level'] == 'HIGH'].head(10)
     if not high_risk.empty:
         st.dataframe(
             high_risk.style.set_properties(
@@ -583,7 +610,9 @@ elif page == "🔍 Features":
     st.subheader("Feature Importance (Logistic Regression Coefficients)")
 
     try:
-        feature_importance = get_feature_importance(model, feature_names)
+        fi_pairs = get_feature_importance(model, feature_names)
+        fi_names = [p[0] for p in fi_pairs]
+        fi_vals  = [p[1] for p in fi_pairs]
     except Exception as e:
         st.error(f"Error loading feature importance: {e}")
         st.stop()
@@ -592,45 +621,33 @@ elif page == "🔍 Features":
 
     with col_l:
         st.markdown("**🔴 Top 15 Fraud Indicators**")
-        top_fraud = feature_importance.nlargest(15, 'importance')
+        pos_pairs = sorted([(n, v) for n, v in zip(fi_names, fi_vals) if v > 0],
+                           key=lambda x: x[1], reverse=True)[:15]
+        p_names = [p[0] for p in pos_pairs]
+        p_vals  = [p[1] for p in pos_pairs]
         fig_fraud = go.Figure(go.Bar(
-            x=top_fraud['importance'],
-            y=top_fraud['feature'],
-            orientation='h',
-            marker=dict(color=top_fraud['importance'],
-                        colorscale=[[0, "#3a1a1a"], [1, "#ff4d4d"]],
-                        showscale=False),
+            x=p_vals, y=p_names, orientation='h',
+            marker=dict(color=p_vals, colorscale=[[0,"#3a1a1a"],[1,"#ff4d4d"]], showscale=False),
         ))
         fig_fraud.update_layout(**PLOTLY_LAYOUT,
-                                yaxis=dict(categoryorder='total ascending',
-                                           tickfont=dict(color="#ccc", size=11)),
+                                yaxis=dict(categoryorder='total ascending', tickfont=dict(color="#ccc", size=11)),
                                 height=420)
         st.plotly_chart(fig_fraud, use_container_width=True)
 
     with col_r:
         st.markdown("**🟢 Top 15 Legit Indicators**")
-        top_legit = feature_importance.nsmallest(15, 'importance')
+        neg_pairs = sorted([(n, v) for n, v in zip(fi_names, fi_vals) if v < 0],
+                           key=lambda x: x[1])[:15]
+        n_names = [p[0] for p in neg_pairs]
+        n_vals  = [p[1] for p in neg_pairs]
         fig_legit = go.Figure(go.Bar(
-            x=top_legit['importance'],
-            y=top_legit['feature'],
-            orientation='h',
-            marker=dict(color=top_legit['importance'],
-                        colorscale=[[0, "#c8ff00"], [1, "#1a2a0a"]],
-                        showscale=False),
+            x=n_vals, y=n_names, orientation='h',
+            marker=dict(color=n_vals, colorscale=[[0,"#c8ff00"],[1,"#1a2a0a"]], showscale=False),
         ))
         fig_legit.update_layout(**PLOTLY_LAYOUT,
-                                yaxis=dict(categoryorder='total descending',
-                                           tickfont=dict(color="#ccc", size=11)),
+                                yaxis=dict(categoryorder='total descending', tickfont=dict(color="#ccc", size=11)),
                                 height=420)
         st.plotly_chart(fig_legit, use_container_width=True)
-
-    try:
-        st.subheader("SHAP Explainability")
-        shap_fig = get_shap_values(model, tfidf, df, feature_names)
-        if shap_fig is not None:
-            st.pyplot(shap_fig)
-    except Exception:
-        st.info("SHAP visualization not available — ensure `get_shap_values` is implemented in `expainability_and_insights.py`.")
 
 # ==============================
 # PAGE: PREDICT
@@ -655,47 +672,62 @@ elif page == "🔎 Predict Job":
         if not description.strip():
             st.warning("Please enter at least a job description.")
         else:
-            from scipy.sparse import hstack
-            import numpy as np
+            X_input, fd = build_feature_vector(tfidf, job_title, description, company, "")
+            prob        = model.predict_proba(X_input)[0][1]
+            risk_score  = compute_risk_score(prob, fd)
+            level, _, _, level_color, advice = get_risk_level(risk_score)
+            scam_hits   = matched_scam_phrases(job_title, description)
 
-            combined = f"{job_title} {description} {requirements}"
-            X_text   = tfidf.transform([combined])
+            adj = (0.5 + (prob - FRAUD_THRESHOLD) / (1 - FRAUD_THRESHOLD) * 0.5) if prob >= FRAUD_THRESHOLD else (prob / FRAUD_THRESHOLD * 0.5)
+            _, contribs = top_driver(adj * 100, fd)
 
-            # Behavioral features
-            urgency_words = ['urgent','immediate','limited','apply fast','hurry','few slots','act now']
-            urgency = sum(w in description.lower() for w in urgency_words)
-            free_domains = ['gmail.com','yahoo.com','outlook.com','hotmail.com']
-            free_email = int(any(d in company.lower() for d in free_domains))
-            desc_len = len(description)
+            shap_vals, _, _ = compute_shap_values(model, X_input, feature_names)
+            top_feats = top_shap_features(shap_vals, feature_names, n=8)
 
-            X_beh   = np.array([[desc_len, urgency, free_email]])
-            X_input = hstack([X_text, X_beh])
+            level_class = {"HIGH": "card-danger", "MEDIUM": "card", "LOW": "card-accent"}.get(level, "card")
 
-            prob       = model.predict_proba(X_input)[0][1]
-            risk_score = np.clip(prob * 100, 0, 100)
-            level      = risk_bucket(risk_score)
-
-            # ── Result Display ────────────────────────────────────────────
             st.markdown("<br>", unsafe_allow_html=True)
-            level_class = {"High": "card-danger", "Medium": "card", "Low": "card-accent"}.get(level, "card")
-            level_color = {"High": "#ff4d4d", "Medium": "#ffc400", "Low": "#c8ff00"}.get(level, "#888")
+            st.markdown(
+                f"<div class=\'card {level_class}\' style=\'text-align:center;padding:2rem;\'>"
+                f"<div style=\'font-family:Syne,sans-serif;font-size:0.8rem;color:#666;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.5rem;\'>Risk Assessment</div>"
+                f"<div style=\'font-family:Syne,sans-serif;font-size:3rem;font-weight:800;color:{level_color};line-height:1;\'>{risk_score:.1f}</div>"
+                f"<div style=\'font-size:0.85rem;color:#666;margin:0.4rem 0 1rem;\'>/ 100</div>"
+                f"<div class=\'risk-{level.lower()}\'>{level} Risk</div>"
+                f"<div style=\'margin-top:1rem;font-size:0.85rem;color:#aaa;\'>Fraud probability: <strong style=\'color:{level_color};\'>{prob:.1%}</strong></div>"
+                f"<div style=\'margin-top:0.5rem;font-size:0.82rem;color:#888;\'>{advice}</div>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
 
-            st.markdown(f"""
-            <div class='card {level_class}' style='text-align:center; padding:2rem;'>
-                <div style='font-family:Syne,sans-serif; font-size:0.8rem; color:#666; letter-spacing:0.15em; text-transform:uppercase; margin-bottom:0.5rem;'>Risk Assessment</div>
-                <div style='font-family:Syne,sans-serif; font-size:3rem; font-weight:800; color:{level_color}; line-height:1;'>{risk_score:.1f}</div>
-                <div style='font-size:0.85rem; color:#666; margin:0.4rem 0 1rem;'>/ 100</div>
-                <div class='risk-{level.lower()}'>{level} Risk</div>
-                <div style='margin-top:1rem; font-size:0.85rem; color:#888;'>Fraud probability: <strong style='color:{level_color};'>{prob:.1%}</strong></div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4)
             c1.metric("Fraud Probability", f"{prob:.1%}")
-            c2.metric("Urgency Signals",   str(urgency))
-            c3.metric("Free Email Domain", "Yes" if free_email else "No")
+            c2.metric("Risk Score",        f"{risk_score:.1f} / 100")
+            c3.metric("Urgency Signals",   str(fd["urgency"]))
+            c4.metric("Free Email",        "Yes" if fd["free_email"] else "No")
 
-# ==============================
+            st.markdown("<br>**Risk Score Breakdown**", unsafe_allow_html=True)
+            driver_df = pd.DataFrame(list(contribs.items()), columns=["Driver", "Points"])
+            fig_d = go.Figure(go.Bar(
+                x=driver_df["Points"], y=driver_df["Driver"], orientation="h",
+                marker=dict(color="#c8ff00", line=dict(color="#111", width=1)),
+            ))
+            fig_d.update_layout(**PLOTLY_LAYOUT, height=220)
+            st.plotly_chart(fig_d, use_container_width=True)
+
+            st.markdown("**Top Influencing Words / Features**")
+            shap_df = pd.DataFrame(top_feats, columns=["Feature", "SHAP Value"])
+            shap_colors = ["#ff4d4d" if v > 0 else "#c8ff00" for v in shap_df["SHAP Value"]]
+            fig_s = go.Figure(go.Bar(
+                x=shap_df["SHAP Value"], y=shap_df["Feature"], orientation="h",
+                marker=dict(color=shap_colors, line=dict(color="#111", width=1)),
+            ))
+            fig_s.update_layout(**PLOTLY_LAYOUT, height=300,
+                                yaxis=dict(categoryorder="total ascending", tickfont=dict(color="#ccc", size=11)))
+            st.plotly_chart(fig_s, use_container_width=True)
+
+            if scam_hits:
+                st.warning(f"⚠️ Scam phrases detected: {', '.join(scam_hits)}")
+
 # FOOTER
 # ==============================
 
