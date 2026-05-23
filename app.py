@@ -281,10 +281,11 @@ PLOTLY_LAYOUT = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(17,17,17,1)",
     font=dict(family="DM Sans", color="#f5f5f5", size=12),
-    xaxis=dict(gridcolor="#2a2a2a", zerolinecolor="#2a2a2a", tickfont=dict(color="#888")),
-    yaxis=dict(gridcolor="#2a2a2a", zerolinecolor="#2a2a2a", tickfont=dict(color="#888")),
     margin=dict(l=16, r=16, t=40, b=16),
 )
+
+# Default axis style — merge manually when no override needed
+AXIS_STYLE = dict(gridcolor="#2a2a2a", zerolinecolor="#2a2a2a", tickfont=dict(color="#888"))
 
 # ==============================
 # LOAD PRE-TRAINED ARTIFACTS
@@ -448,7 +449,7 @@ if page == "📊 Dashboard":
                         line=dict(color="#111", width=3)),
             textfont=dict(family="DM Sans", size=13),
         ))
-        fig_pie.update_layout(**PLOTLY_LAYOUT, showlegend=True,
+        fig_pie.update_layout(**PLOTLY_LAYOUT, xaxis=AXIS_STYLE, yaxis=AXIS_STYLE, showlegend=True,
                               legend=dict(orientation="h", y=-0.1, font=dict(color="#888")))
         fig_pie.add_annotation(text=f"{fraud_rate:.1%}<br><span style='font-size:10px'>Fraud</span>",
                                x=0.5, y=0.5, showarrow=False,
@@ -469,7 +470,7 @@ if page == "📊 Dashboard":
             name="Fraud", nbinsx=40,
             marker_color="rgba(255,77,77,0.7)",
         ))
-        fig_hist.update_layout(**PLOTLY_LAYOUT, barmode="overlay",
+        fig_hist.update_layout(**PLOTLY_LAYOUT, xaxis=AXIS_STYLE, yaxis=AXIS_STYLE, barmode="overlay",
                                legend=dict(font=dict(color="#888")))
         st.plotly_chart(fig_hist, use_container_width=True)
 
@@ -510,8 +511,8 @@ elif page == "🏆 Benchmarks":
             textfont=dict(color="#f5f5f5", size=11),
         ))
         fig_bar.update_layout(**PLOTLY_LAYOUT, title="AUC Scores",
-                              yaxis=dict(range=[0.97, 0.995], gridcolor="#2a2a2a",
-                                         tickfont=dict(color="#888")))
+                              xaxis=AXIS_STYLE,
+                              yaxis=dict(range=[0.97, 0.995], gridcolor="#2a2a2a", tickfont=dict(color="#888")))
         st.plotly_chart(fig_bar, use_container_width=True)
 
     with col_r:
@@ -529,8 +530,8 @@ elif page == "🏆 Benchmarks":
             textfont=dict(color="#f5f5f5", size=11),
         ))
         fig_f1.update_layout(**PLOTLY_LAYOUT, title="F1 Score (Fraud Class)",
-                             yaxis=dict(range=[0.7, 0.95], gridcolor="#2a2a2a",
-                                        tickfont=dict(color="#888")))
+                             xaxis=AXIS_STYLE,
+                             yaxis=dict(range=[0.7, 0.95], gridcolor="#2a2a2a", tickfont=dict(color="#888")))
         st.plotly_chart(fig_f1, use_container_width=True)
 
     st.dataframe(
@@ -603,7 +604,7 @@ elif page == "⚠️ Risk Analysis":
             marker=dict(colors=[color_map.get(l, '#888') for l in risk_dist['Risk Level']],
                         line=dict(color="#111", width=3)),
         ))
-        fig_donut.update_layout(**PLOTLY_LAYOUT, title="Risk Level Breakdown",
+        fig_donut.update_layout(**PLOTLY_LAYOUT, xaxis=AXIS_STYLE, yaxis=AXIS_STYLE, title="Risk Level Breakdown",
                                 showlegend=True,
                                 legend=dict(orientation="h", y=-0.15, font=dict(color="#888")))
         st.plotly_chart(fig_donut, use_container_width=True)
@@ -618,7 +619,7 @@ elif page == "⚠️ Risk Analysis":
             textposition="outside",
             textfont=dict(color="#f5f5f5"),
         ))
-        fig_risk_bar.update_layout(**PLOTLY_LAYOUT, title="Count by Risk Level")
+        fig_risk_bar.update_layout(**PLOTLY_LAYOUT, xaxis=AXIS_STYLE, yaxis=AXIS_STYLE, title="Count by Risk Level")
         st.plotly_chart(fig_risk_bar, use_container_width=True)
 
     # ── High Risk Samples ─────────────────────────────────────────────────
@@ -663,7 +664,8 @@ elif page == "🔍 Features":
             marker=dict(color=p_vals, colorscale=[[0,"#3a1a1a"],[1,"#ff4d4d"]], showscale=False),
         ))
         fig_fraud.update_layout(**PLOTLY_LAYOUT,
-                                yaxis=dict(categoryorder='total ascending', tickfont=dict(color="#ccc", size=11)),
+                                xaxis=AXIS_STYLE,
+                                yaxis=dict(categoryorder='total ascending', gridcolor='#2a2a2a', tickfont=dict(color='#ccc', size=11)),
                                 height=420)
         st.plotly_chart(fig_fraud, use_container_width=True)
 
@@ -678,7 +680,8 @@ elif page == "🔍 Features":
             marker=dict(color=n_vals, colorscale=[[0,"#c8ff00"],[1,"#1a2a0a"]], showscale=False),
         ))
         fig_legit.update_layout(**PLOTLY_LAYOUT,
-                                yaxis=dict(categoryorder='total descending', tickfont=dict(color="#ccc", size=11)),
+                                xaxis=AXIS_STYLE,
+                                yaxis=dict(categoryorder='total descending', gridcolor='#2a2a2a', tickfont=dict(color='#ccc', size=11)),
                                 height=420)
         st.plotly_chart(fig_legit, use_container_width=True)
 
@@ -744,7 +747,7 @@ elif page == "🔎 Predict Job":
                 x=driver_df["Points"], y=driver_df["Driver"], orientation="h",
                 marker=dict(color="#c8ff00", line=dict(color="#111", width=1)),
             ))
-            fig_d.update_layout(**PLOTLY_LAYOUT, height=220)
+            fig_d.update_layout(**PLOTLY_LAYOUT, xaxis=AXIS_STYLE, yaxis=AXIS_STYLE, height=220)
             st.plotly_chart(fig_d, use_container_width=True)
 
             st.markdown("**Top Influencing Words / Features**")
@@ -755,7 +758,8 @@ elif page == "🔎 Predict Job":
                 marker=dict(color=shap_colors, line=dict(color="#111", width=1)),
             ))
             fig_s.update_layout(**PLOTLY_LAYOUT, height=300,
-                                yaxis=dict(categoryorder="total ascending", tickfont=dict(color="#ccc", size=11)))
+                                xaxis=AXIS_STYLE,
+                                yaxis=dict(categoryorder="total ascending", gridcolor="#2a2a2a", tickfont=dict(color="#ccc", size=11)))
             st.plotly_chart(fig_s, use_container_width=True)
 
             if scam_hits:
