@@ -301,7 +301,40 @@ def load_artifacts():
 
 @st.cache_data
 def load_data():
-    df = pd.read_csv(BASE_DIR / "data" / "fake_job_postings.csv")
+    csv_path = BASE_DIR / "data" / "fake_job_postings.csv"
+
+    # ── If CSV missing, download from Google Drive ──────────────────────────
+    if not csv_path.exists():
+        try:
+            import requests
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+            FILE_ID = "1pr7WhWJV71h8mhfNYW_bmJfNUeLD0AHm"
+            url     = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
+
+            with st.spinner("Downloading dataset from Google Drive..."):
+                session  = requests.Session()
+                response = session.get(url, stream=True)
+
+                # Handle Google large-file confirmation token
+                confirm_token = None
+                for key, value in response.cookies.items():
+                    if key.startswith("download_warning"):
+                        confirm_token = value
+                        break
+                if confirm_token:
+                    response = session.get(url, params={"confirm": confirm_token}, stream=True)
+
+                with open(csv_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=32768):
+                        if chunk:
+                            f.write(chunk)
+
+        except Exception as dl_err:
+            st.error(f"CSV not found locally and Google Drive download failed: {dl_err}")
+            st.stop()
+
+    df = pd.read_csv(csv_path)
     text_cols = ['title', 'description', 'company_profile', 'requirements']
     for col in text_cols:
         df[col] = df[col].fillna('')
