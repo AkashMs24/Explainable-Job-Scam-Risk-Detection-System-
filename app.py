@@ -1,15 +1,8 @@
 """
-SCAMGUARD-AI  |  app.py
-========================
-Corrected to exactly match training code:
-- Model: Logistic Regression (not RF)
-- SHAP: LinearExplainer (correct for LR)
-- Urgency words: exact 7 from training
-- Free domains: exact 4 from training
-- Risk weights: aligned with training scoring engine
-- Threshold: tuned via ROC (not default 0.5)
+SCAMGUARD-AI  |  app.py  (UI v3 — Dark Professional)
+======================================================
+Logic unchanged. Only CSS + layout upgraded.
 """
-
 import streamlit as st
 import numpy as np
 import joblib
@@ -23,23 +16,19 @@ try:
     SHAP_AVAILABLE = True
 except ImportError:
     SHAP_AVAILABLE = False
-
 try:
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
     MPL_AVAILABLE = True
 except ImportError:
     MPL_AVAILABLE = False
-
 try:
     import pandas as pd
     PD_AVAILABLE = True
 except ImportError:
     PD_AVAILABLE = False
 
-# =====================================================================
-# PAGE CONFIG
-# =====================================================================
+# ── PAGE CONFIG ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="SCAMGUARD-AI",
     page_icon="🛡️",
@@ -47,54 +36,286 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ── GLOBAL CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    .metric-card {
-        background: #f8f9fa;
-        border-left: 4px solid #1f77b4;
-        padding: 12px 16px;
-        border-radius: 4px;
-        margin-bottom: 8px;
-    }
-    .metric-card.danger { border-left-color: #d62728; }
-    .metric-card.warn   { border-left-color: #ff7f0e; }
-    .metric-card.good   { border-left-color: #2ca02c; }
-    .metric-card h4     { margin: 0 0 4px 0; font-size: 12px; color: #666;
-                          text-transform: uppercase; letter-spacing: 1px; }
-    .metric-card p      { margin: 0; font-size: 22px; font-weight: 700; color: #1a1a1a; }
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
-    .section-header {
-        font-size: 13px; font-weight: 600; color: #444;
-        text-transform: uppercase; letter-spacing: 1.5px;
-        border-bottom: 2px solid #e0e0e0;
-        padding-bottom: 6px; margin: 24px 0 14px 0;
-    }
-    .pill { display:inline-block; padding:2px 10px; border-radius:12px;
-            font-size:12px; font-weight:600; }
-    .pill-red    { background:#fde8e8; color:#c0392b; }
-    .pill-orange { background:#fef3e2; color:#d35400; }
-    .pill-green  { background:#e8f8f0; color:#1e8449; }
-    .pill-blue   { background:#e8f0fe; color:#1a5276; }
+html, body, [class*="css"] {
+    font-family: 'Syne', sans-serif !important;
+    background-color: #0b0c0f !important;
+    color: #e8e5de !important;
+}
+.stApp { background-color: #0b0c0f !important; }
+.block-container { padding-top: 1.2rem !important; max-width: 1400px !important; }
 
-    .insight-box {
-        background:#fffbf0; border:1px solid #f0c040;
-        border-left:4px solid #f0c040; padding:10px 14px;
-        border-radius:4px; font-size:13px; color:#5d4037; margin:8px 0;
-    }
-    .ds-note {
-        background:#f0f4ff; border:1px solid #b3c6ff;
-        border-left:4px solid #3366ff; padding:10px 14px;
-        border-radius:4px; font-size:12px; color:#1a237e; margin:6px 0;
-    }
-    .fix-note {
-        background:#fff0f0; border:1px solid #ffb3b3;
-        border-left:4px solid #d62728; padding:10px 14px;
-        border-radius:4px; font-size:12px; color:#7b1a1a; margin:6px 0;
-    }
-    code { background:#f0f0f0; padding:1px 5px; border-radius:3px; font-size:12px; }
+/* ── SIDEBAR ── */
+[data-testid="stSidebar"] {
+    background: #0f1014 !important;
+    border-right: 1px solid #1c1e24 !important;
+}
+[data-testid="stSidebar"] * { font-family: 'Syne', sans-serif !important; }
+[data-testid="stSidebar"] .stMarkdown p,
+[data-testid="stSidebar"] .stMarkdown li { font-size: 13px !important; color: #9090a8 !important; line-height: 1.65 !important; }
+[data-testid="stSidebar"] h1 { font-size: 1.1rem !important; font-weight: 800 !important; color: #f5f3ec !important; }
+[data-testid="stSidebar"] h4 { font-size: 0.72rem !important; font-weight: 700 !important; color: #e85d5d !important; letter-spacing: 0.12em !important; text-transform: uppercase !important; }
+[data-testid="stSidebar"] code { background: #1a1c22 !important; color: #e85d5d !important; padding: 1px 5px !important; border-radius: 3px !important; font-size: 11px !important; }
+[data-testid="stSidebar"] .stExpander { background: #141519 !important; border: 1px solid #1c1e24 !important; border-radius: 8px !important; }
+[data-testid="stSidebar"] hr { border-color: #1c1e24 !important; }
+[data-testid="stSidebar"] caption { color: #50506a !important; font-size: 11px !important; }
+
+/* ── TOPBAR ── */
+.topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.8rem 1.5rem;
+    background: #0f1014;
+    border: 1px solid #1c1e24;
+    border-radius: 12px;
+    margin-bottom: 0.25rem;
+}
+.topbar-brand {
+    display: flex; align-items: center; gap: 10px;
+}
+.topbar-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: #e85d5d;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; line-height: 1;
+}
+.topbar-name {
+    font-size: 1rem; font-weight: 800; letter-spacing: 0.06em;
+    color: #f5f3ec; text-transform: uppercase;
+}
+.topbar-sub { font-size: 0.65rem; color: #60607a; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 1px; }
+.topbar-status {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 0.68rem; font-weight: 600; color: #4ade80;
+    letter-spacing: 0.08em; text-transform: uppercase;
+}
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ── HERO ── */
+.hero {
+    text-align: center;
+    padding: 2rem 1rem 1.5rem;
+}
+.hero-kicker {
+    font-size: 0.63rem; font-weight: 700; letter-spacing: 0.2em;
+    text-transform: uppercase; color: #e85d5d;
+    margin-bottom: 0.7rem;
+}
+.hero-title {
+    font-size: 2.4rem; font-weight: 800; line-height: 1.1;
+    color: #f5f3ec; letter-spacing: -0.02em; margin: 0 0 0.6rem;
+}
+.hero-title em { font-style: normal; color: #e85d5d; }
+.hero-desc {
+    font-size: 0.88rem; color: #6a6a84; max-width: 520px;
+    margin: 0 auto; line-height: 1.65;
+}
+.hero-rule { width: 40px; height: 2px; background: #e85d5d; margin: 1.2rem auto 0; border-radius: 2px; opacity: 0.5; }
+
+/* ── STAT STRIP ── */
+.stat-strip { display: flex; gap: 10px; margin: 1rem 0 1.5rem; }
+.stat-box {
+    flex: 1; background: #0f1014; border: 1px solid #1c1e24;
+    border-radius: 10px; padding: 0.8rem 1rem; text-align: center;
+}
+.stat-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.3rem; font-weight: 500; color: #e85d5d; line-height: 1; }
+.stat-lbl { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #40405a; margin-top: 5px; }
+
+/* ── SECTION LABEL ── */
+.slabel {
+    font-size: 0.6rem; font-weight: 700; letter-spacing: 0.18em;
+    text-transform: uppercase; color: #3a3a52;
+    display: flex; align-items: center; gap: 10px;
+    margin: 1.4rem 0 0.7rem;
+}
+.slabel::before { content:''; width: 20px; height: 1px; background: #e85d5d; opacity: 0.6; }
+.slabel::after  { content:''; flex: 1; height: 1px; background: #1c1e24; }
+
+/* ── INPUT PANEL ── */
+.input-panel {
+    background: #0f1014; border: 1px solid #1c1e24;
+    border-radius: 12px; padding: 1.4rem 1.4rem 1rem;
+    margin-bottom: 1rem;
+}
+
+/* ── METRIC CARDS ── */
+.mc {
+    background: #0f1014; border: 1px solid #1c1e24;
+    border-radius: 10px; padding: 0.9rem 1rem;
+    border-top: 2px solid #1c1e24;
+}
+.mc.danger { border-top-color: #e85d5d; }
+.mc.warn   { border-top-color: #f59e0b; }
+.mc.good   { border-top-color: #4ade80; }
+.mc.neutral{ border-top-color: #6b7280; }
+.mc-lbl { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #40405a; margin-bottom: 6px; }
+.mc-val { font-size: 1.5rem; font-weight: 700; color: #f5f3ec; font-family: 'IBM Plex Mono', monospace; line-height: 1.1; }
+.mc-val.danger { color: #e85d5d; }
+.mc-val.warn   { color: #f59e0b; }
+.mc-val.good   { color: #4ade80; }
+
+/* ── PILLS ── */
+.pill {
+    display: inline-block; padding: 2px 10px; border-radius: 5px;
+    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.pill-red    { background: rgba(232,93,93,0.12); border: 1px solid rgba(232,93,93,0.3); color: #e85d5d; }
+.pill-amber  { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); color: #f59e0b; }
+.pill-green  { background: rgba(74,222,128,0.12); border: 1px solid rgba(74,222,128,0.3); color: #4ade80; }
+.pill-gray   { background: rgba(107,114,128,0.12); border: 1px solid rgba(107,114,128,0.3); color: #9ca3af; }
+
+/* ── FEATURE ROW ── */
+.feat-row {
+    background: #0b0c0f; border: 1px solid #1c1e24;
+    border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.5rem;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.feat-label { font-size: 0.8rem; font-weight: 600; color: #c0bdb0; }
+.feat-sub { font-size: 0.65rem; color: #40405a; margin-top: 2px; }
+.feat-val { font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; color: #e85d5d; font-weight: 500; }
+
+/* ── MINI BAR ── */
+.mini-bar-bg { background: #1a1c22; border-radius: 3px; height: 3px; margin-top: 6px; }
+.mini-bar-fill { height: 3px; border-radius: 3px; background: #e85d5d; }
+
+/* ── INSIGHT BOX ── */
+.insight {
+    background: #110d0d; border: 1px solid #2a1a1a;
+    border-left: 3px solid #e85d5d;
+    border-radius: 8px; padding: 0.9rem 1.1rem;
+    font-size: 0.82rem; color: #c0a090; line-height: 1.6; margin: 0.6rem 0;
+}
+.insight b { color: #e85d5d; }
+
+/* ── DS NOTE ── */
+.ds-note {
+    background: #0d1018; border: 1px solid #1a2030;
+    border-left: 3px solid #3b82f6;
+    border-radius: 8px; padding: 0.8rem 1rem;
+    font-size: 0.78rem; color: #8090b0; line-height: 1.6; margin: 0.5rem 0;
+}
+.ds-note b { color: #3b82f6; }
+
+/* ── ADVISORY BOX ── */
+.advisory {
+    background: #100d06; border: 1px solid #28200a;
+    border-left: 3px solid #f59e0b;
+    border-radius: 8px; padding: 0.8rem 1rem;
+    font-size: 0.8rem; color: #b09060; line-height: 1.6; margin: 0.5rem 0;
+}
+.advisory b { color: #f59e0b; }
+
+/* ── FLAG ROW ── */
+.flag-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 0.55rem 0; border-bottom: 1px solid #141619;
+    font-size: 0.82rem; color: #c0bdb0;
+}
+.flag-icon { font-size: 0.75rem; margin-top: 2px; min-width: 16px; }
+.flag-desc { font-size: 0.68rem; color: #50506a; margin-top: 2px; }
+
+/* ── TRACE BOX ── */
+.trace-box {
+    background: #0b0c0f; border: 1px solid #1c1e24;
+    border-radius: 8px; padding: 1rem 1.1rem;
+    font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem;
+    color: #8888a8; line-height: 1.9;
+}
+.trace-box span.key { color: #6b7280; }
+.trace-box span.val { color: #e85d5d; }
+.trace-box span.ok  { color: #4ade80; }
+.trace-box span.warn{ color: #f59e0b; }
+
+/* ── CHECKLIST ── */
+.check-item {
+    background: #0f1014; border: 1px solid #1c1e24;
+    border-radius: 8px; padding: 0.7rem 1rem; margin-bottom: 0.4rem;
+    display: flex; gap: 10px; align-items: flex-start;
+}
+.check-num {
+    width: 22px; height: 22px; border-radius: 5px;
+    background: rgba(232,93,93,0.12); border: 1px solid rgba(232,93,93,0.25);
+    color: #e85d5d; font-size: 0.7rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.check-title { font-size: 0.82rem; font-weight: 600; color: #d0cdc6; }
+.check-detail { font-size: 0.7rem; color: #50506a; margin-top: 2px; }
+
+/* ── SCORE GAUGE ── */
+.gauge-wrap { text-align: center; padding: 1rem 0; }
+.gauge-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 3.5rem; font-weight: 500; line-height: 1;
+}
+.gauge-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #40405a; margin-top: 8px; }
+.gauge-bar-bg { background: #1a1c22; border-radius: 4px; height: 6px; margin: 12px 0 6px; }
+.gauge-bar-fill { height: 6px; border-radius: 4px; transition: width 0.5s; }
+
+/* ── STREAMLIT OVERRIDES ── */
+div.stButton > button {
+    background: #e85d5d !important;
+    color: #0b0c0f !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-family: 'Syne', sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 0.88rem !important;
+    letter-spacing: 0.04em !important;
+    padding: 0.5rem 1.2rem !important;
+    transition: opacity 0.15s, transform 0.1s !important;
+}
+div.stButton > button:hover { opacity: 0.82 !important; transform: translateY(-1px) !important; }
+
+.stTextInput input, .stTextArea textarea {
+    background: #0b0c0f !important;
+    border: 1px solid #1c1e24 !important;
+    border-radius: 8px !important;
+    color: #e8e5de !important;
+    font-family: 'Syne', sans-serif !important;
+    font-size: 0.88rem !important;
+}
+.stTextInput input:focus, .stTextArea textarea:focus {
+    border-color: #e85d5d !important;
+    box-shadow: 0 0 0 2px rgba(232,93,93,0.15) !important;
+}
+.stSelectbox > div > div {
+    background: #0b0c0f !important;
+    border: 1px solid #1c1e24 !important;
+    border-radius: 8px !important;
+    color: #e8e5de !important;
+}
+.stExpander {
+    background: #0f1014 !important;
+    border: 1px solid #1c1e24 !important;
+    border-radius: 10px !important;
+}
+.stExpander summary { color: #c0bdb0 !important; font-size: 0.85rem !important; font-weight: 600 !important; }
+.stAlert { background: #0f1014 !important; border-radius: 8px !important; border: 1px solid #1c1e24 !important; }
+.stDataFrame { background: #0b0c0f !important; border-radius: 8px !important; }
+hr, .stDivider { border-color: #1c1e24 !important; }
+.stSpinner > div { color: #e85d5d !important; }
+label { color: #72728a !important; font-size: 0.8rem !important; font-weight: 600 !important; letter-spacing: 0.04em !important; }
+
+/* ── FOOTER ── */
+.footer {
+    text-align: center; padding: 1.2rem 0 0.5rem;
+    font-size: 0.68rem; color: #28283a; border-top: 1px solid #141619;
+    margin-top: 2rem; letter-spacing: 0.06em;
+}
+.footer b { color: #e85d5d; font-weight: 600; }
+
+/* ── MATPLOTLIB DARK ── */
+.stPlotlyChart, .stPyplot { background: transparent !important; }
 </style>
 """, unsafe_allow_html=True)
 
+# ── SESSION STATE ─────────────────────────────────────────────────────────────
+if "analyzed" not in st.session_state:
+    st.session_state.analyzed = False
 
 # =====================================================================
 # LOAD ARTIFACTS
@@ -110,300 +331,212 @@ def load_artifacts():
 
 fraud_model, tfidf_vectorizer, feature_names = load_artifacts()
 
-
 # =====================================================================
-# CONSTANTS — MUST EXACTLY MATCH TRAINING CODE
+# CONSTANTS — EXACT MATCH TO TRAINING
 # =====================================================================
-
-# ⚠️ These are the EXACT lists from your training script (train_model.py)
-# Do NOT add extra words here — feature engineering must be identical
-# to what the model was trained on, or predictions will be wrong.
-
-URGENCY_WORDS = [
-    "urgent", "immediate", "limited",
-    "apply fast", "hurry", "few slots", "act now"
-]  # 7 words — exact match to training
-
-FREE_DOMAINS = [
-    "gmail.com", "yahoo.com", "outlook.com", "hotmail.com"
-]  # 4 domains — exact match to training
-
-BEHAVIOR_FEATURES = ["desc_length", "urgency_score", "free_email"]
-# ^ exact column order from training — DO NOT reorder
-
-# ── Tuned decision threshold ──
-# Default 0.5 is wrong for imbalanced fraud data (~5% fraud class).
-# With class_weight='balanced', LR shifts probabilities toward 0.5.
-# Optimal threshold tuned by maximizing F1 on validation set via ROC curve.
-# Typical range for this dataset: 0.30–0.40. Set conservatively at 0.35
-# (prefer higher recall — missing a scam is worse than a false alarm).
+URGENCY_WORDS  = ["urgent", "immediate", "limited", "apply fast", "hurry", "few slots", "act now"]
+FREE_DOMAINS   = ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com"]
 FRAUD_THRESHOLD = 0.35
 
-
 # =====================================================================
-# FEATURE FUNCTIONS — identical logic to training
+# FEATURE FUNCTIONS
 # =====================================================================
-
-def urgency_score(text: str) -> int:
-    """Exact replica of training urgency_score()."""
+def urgency_score(text):
     text = str(text).lower()
     return sum(word in text for word in URGENCY_WORDS)
 
-def free_email_flag(text: str) -> int:
-    """Exact replica of training free_email_flag()."""
+def free_email_flag(text):
     text = str(text).lower()
-    return int(any(domain in text for domain in FREE_DOMAINS))
+    return int(any(d in text for d in FREE_DOMAINS))
 
 def build_feature_vector(job_title, job_description, company_profile, salary_range):
-    """
-    Replicates the exact feature pipeline from train_model.py:
-    combined_text = title + description + requirements (we use company_profile
-    as proxy since 'requirements' isn't a separate input field in the UI).
-    X_final = hstack([X_text, X_behavior])
-    """
-    # Training combined: title + description + requirements
-    # UI proxy: title + description + company_profile (closest available)
-    combined_text = (
-        str(job_title) + " " +
-        str(job_description) + " " +
-        str(company_profile)
-    )
-    X_text = tfidf_vectorizer.transform([combined_text])
-
-    desc_length = len(str(job_description))
-    urgency     = urgency_score(str(job_description))   # training used description only
-    free_email  = free_email_flag(str(company_profile)) # training used company_profile only
-
-    # Exact column order: ['desc_length', 'urgency_score', 'free_email']
-    X_behavior = np.array([[desc_length, urgency, free_email]])
+    combined_text = f"{job_title} {job_description} {company_profile}"
+    X_text     = tfidf_vectorizer.transform([combined_text])
+    desc_len   = len(str(job_description))
+    urgency    = urgency_score(str(job_description))
+    free_email = free_email_flag(str(company_profile))
+    X_behavior = np.array([[desc_len, urgency, free_email]])
     X_final    = hstack([X_text, X_behavior])
+    fd = {"desc_length": desc_len, "urgency": urgency, "free_email": free_email,
+          "salary_missing": int(not salary_range.strip())}
+    return X_final, fd
 
-    feature_dict = {
-        "desc_length":    desc_length,
-        "urgency":        urgency,
-        "free_email":     free_email,
-        "salary_missing": int(not salary_range.strip()),
-    }
-    return X_final, feature_dict
-
-
-# =====================================================================
-# RISK SCORING — aligned with training scoring engine (section 10)
-# =====================================================================
-
-def compute_risk_score(fraud_prob: float, fd: dict) -> float:
-    """
-    Weights aligned with training script's risk scoring engine:
-        0.60 * ML_prob
-        0.15 * urgency_norm
-        0.15 * salary_missing
-        0.10 * free_email
-
-    Additional rule-based signals (scam phrases, caps, sus salary)
-    are extra features not in training — kept as additive bonuses only,
-    with lower total weight so they don't distort the trained model's signal.
-
-    Threshold adjustment:
-    fraud_prob is re-evaluated against FRAUD_THRESHOLD (0.35) before scoring.
-    This corrects for the default-0.5 threshold mismatch on imbalanced data.
-    """
-    # Adjust probability relative to tuned threshold
-    # If model says 0.40 and threshold is 0.35, that's actually a positive
-    # prediction — scale it up proportionally for scoring purposes
+def compute_risk_score(fraud_prob, fd):
     if fraud_prob >= FRAUD_THRESHOLD:
-        adjusted_prob = 0.5 + (fraud_prob - FRAUD_THRESHOLD) / (1 - FRAUD_THRESHOLD) * 0.5
+        adj = 0.5 + (fraud_prob - FRAUD_THRESHOLD) / (1 - FRAUD_THRESHOLD) * 0.5
     else:
-        adjusted_prob = fraud_prob / FRAUD_THRESHOLD * 0.5
-    adjusted_prob = min(adjusted_prob, 1.0)
-
-    urgency_norm = min(fd["urgency"] / max(len(URGENCY_WORDS), 1), 1.0)
-
-    # Core score — matching training weights exactly
-    score = (
-          0.60 * adjusted_prob
-        + 0.15 * urgency_norm
-        + 0.15 * fd["salary_missing"]
-        + 0.10 * fd["free_email"]
-    ) * 100
-
-    # ── Behavioral override ──
-    # If rule-based signals are overwhelming (free email + high urgency + missing salary),
-    # don't let an uncertain model drag score below HIGH.
-    # This is a deliberate design choice: when behavioral evidence is strong,
-    # we trust it over a borderline ML probability.
-    behavioral_evidence = (
-          0.15 * urgency_norm
-        + 0.15 * fd["salary_missing"]
-        + 0.10 * fd["free_email"]
-    ) * 100
-
-    if behavioral_evidence >= 20 and fraud_prob >= FRAUD_THRESHOLD:
+        adj = fraud_prob / FRAUD_THRESHOLD * 0.5
+    adj = min(adj, 1.0)
+    urg_norm = min(fd["urgency"] / max(len(URGENCY_WORDS), 1), 1.0)
+    score = (0.60*adj + 0.15*urg_norm + 0.15*fd["salary_missing"] + 0.10*fd["free_email"]) * 100
+    beh = (0.15*urg_norm + 0.15*fd["salary_missing"] + 0.10*fd["free_email"]) * 100
+    if beh >= 20 and fraud_prob >= FRAUD_THRESHOLD:
         score = max(score, 62.0)
-
     return round(min(max(score, 0), 100), 2)
 
+def get_risk_level(score):
+    if score < 30:   return "LOW",    "pill-green", "good",    "#4ade80", "Job appears relatively safe. Verify company details independently."
+    elif score < 60: return "MEDIUM", "pill-amber", "warn",    "#f59e0b", "Proceed with caution. Do not share documents or pay any fee."
+    else:            return "HIGH",   "pill-red",   "danger",  "#e85d5d", "High scam risk. Do NOT apply or share personal information."
 
-def get_risk_level(score: float):
-    if score < 30:
-        return "LOW",    "pill-green",  "good",   "Job appears relatively safe. Verify company details independently."
-    elif score < 60:
-        return "MEDIUM", "pill-orange", "warn",   "Proceed with caution. Do not share documents or pay any fee."
-    else:
-        return "HIGH",   "pill-red",    "danger", "High scam risk. Do NOT apply or share personal information."
-
-def model_confidence(prob: float):
-    """Distance from decision boundary = confidence."""
+def model_confidence(prob):
     dist = abs(prob - FRAUD_THRESHOLD)
-    if dist >= 0.25:   return "High",             "pill-green"
-    elif dist >= 0.10: return "Moderate",          "pill-orange"
-    return               "Low (borderline)",       "pill-red"
+    if dist >= 0.25:   return "High",           "pill-green"
+    elif dist >= 0.10: return "Moderate",        "pill-amber"
+    return               "Low (borderline)",     "pill-red"
 
-# ── helper functions used in feature display ──
-def caps_ratio_fn(text: str) -> float:
+def caps_ratio_fn(text):
     words = str(text).split()
     if not words: return 0.0
     return sum(1 for w in words if w.isupper() and len(w) > 1) / len(words)
 
-def suspicious_salary(salary_text: str) -> int:
+def suspicious_salary(salary_text):
     if not salary_text.strip(): return 0
     sl = salary_text.lower()
     if any(w in sl for w in ["unlimited", "upto", "up to", "per day"]): return 1
     nums = re.findall(r'\d[\d,]*', salary_text)
     if nums:
         try:
-            if max(int(n.replace(",", "")) for n in nums) > 500000: return 1
+            if max(int(n.replace(",","")) for n in nums) > 500000: return 1
         except: pass
     return 0
 
-def top_driver(adjusted_score, fd):
-    urgency_norm = min(fd["urgency"] / max(len(URGENCY_WORDS), 1), 1.0)
-    contributions = {
-        "ML model fraud probability": adjusted_score * 0.60,
-        "Urgency language":           urgency_norm * 0.15 * 100,
+def top_driver(adj_score, fd):
+    urg_norm = min(fd["urgency"] / max(len(URGENCY_WORDS), 1), 1.0)
+    contribs = {
+        "ML model fraud probability": adj_score * 0.60,
+        "Urgency language":           urg_norm * 0.15 * 100,
         "Missing salary info":        fd["salary_missing"] * 0.15 * 100,
         "Free/unverified email":      fd["free_email"] * 0.10 * 100,
     }
-    active = {k: v for k, v in contributions.items() if v > 0}
-    return max(active, key=active.get) if active else "No dominant driver", contributions
-
+    active = {k: v for k, v in contribs.items() if v > 0}
+    return (max(active, key=active.get) if active else "No dominant driver"), contribs
 
 # =====================================================================
-# SIDEBAR — Model Card
+# SIDEBAR
 # =====================================================================
 with st.sidebar:
-    st.title("🛡️ SCAMGUARD-AI")
+    st.markdown("### 🛡️ SCAMGUARD-AI")
     st.caption("Job Scam Detection · Explainable ML")
     st.divider()
 
-    st.markdown("#### 📋 Model Card")
-
-    with st.expander("Architecture", expanded=False):
+    st.markdown("#### Model Card")
+    with st.expander("Architecture"):
         st.markdown("""
-        **Algorithm:** Logistic Regression  
-        **Why LR?**
-        - Interpretable coefficients = built-in feature importance
-        - Works well with sparse high-dimensional TF-IDF features
-        - Fast inference, lightweight deployment
-        - `class_weight='balanced'` handles ~5% fraud imbalance
+**Algorithm:** Logistic Regression
 
-        **Feature space:**
-        - TF-IDF text (5000 features, unigram+bigram): `title + description + requirements`
-        - Behavioral (3 features): `desc_length`, `urgency_score`, `free_email`
+**Why LR?**
+- Interpretable via `coef_`
+- Efficient on sparse TF-IDF
+- `class_weight='balanced'` for imbalanced data
 
-        **Decision threshold:** `0.35` (tuned, not default 0.5)  
-        Why? With imbalanced data, default 0.5 under-flags fraud.
-        Lowering threshold increases recall (catching more real scams).
+**Features:** TF-IDF (5000) + behavioral (3)
+
+**Threshold:** `0.35` — recall-optimized
         """)
 
-    with st.expander("Evaluation Metrics", expanded=False):
+    with st.expander("Evaluation"):
         st.markdown("""
-        | Metric | Value |
-        |--------|-------|
-        | AUC-ROC | ~0.98 |
-        | F1 (fraud class) | ~0.88 |
-        | Precision | ~0.84 |
-        | Recall | ~0.92 |
-        | Accuracy | ~0.97 |
+| Metric | Value |
+|--------|-------|
+| AUC-ROC | ~0.98 |
+| F1 (fraud) | ~0.88 |
+| Precision | ~0.84 |
+| Recall | ~0.92 |
+| Accuracy | ~0.97 |
 
-        > **Key design choice:** Recall optimized over Precision.
-        > Missing a real scam (False Negative) is far costlier
-        > than a false alarm (False Positive) for a fresher applicant.
+Recall optimized > Precision.
+Missing a scam costs more than a false alarm.
         """)
-        st.markdown('<div class="ds-note">📌 Accuracy is misleading on imbalanced data. A model predicting "not fraud" always achieves ~95% accuracy but 0% recall on fraud. Use F1 + AUC-ROC.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="ds-note">📌 Accuracy is misleading on imbalanced data. Use F1 + AUC-ROC.</div>', unsafe_allow_html=True)
 
-    with st.expander("Threshold Tuning", expanded=False):
-        st.markdown(f"""
-        **Default threshold:** 0.5  
-        **Tuned threshold:** {FRAUD_THRESHOLD}
+    with st.expander("Pipeline"):
+        st.code("""text → TF-IDF (5000)
+     + behavioral (3)
+     → LogisticRegression
+     → predict_proba()
+     → threshold @ 0.35
+     → composite risk score
+     → SHAP explanation""", language="text")
 
-        **Why tune?**  
-        Logistic Regression with `class_weight='balanced'` on ~5% fraud data
-        produces well-calibrated probabilities, but the optimal decision
-        boundary shifts left because: cost(FN) >> cost(FP).
-
-        **How to tune in your notebook:**
-        ```python
-        from sklearn.metrics import roc_curve
-        fpr, tpr, thresholds = roc_curve(y_test, y_proba)
-        # Pick threshold that maximizes F1
-        f1_scores = [f1_score(y_test, y_proba >= t) for t in thresholds]
-        best_threshold = thresholds[np.argmax(f1_scores)]
-        ```
-        """)
-
-    with st.expander("Limitations", expanded=False):
+    with st.expander("Limitations"):
         st.markdown("""
-        - LR assumes linear decision boundary — complex fraud patterns may need tree models
-        - TF-IDF loses word order and semantics (BERT would improve this)
-        - Keyword lists (urgency/email) are manually curated — can be evaded by paraphrasing
-        - No temporal drift detection — retrain periodically as scam language evolves
-        - UI uses `company_profile` as proxy for `requirements` — slight feature mismatch
+- Linear boundary — complex fraud may need tree models
+- TF-IDF loses word order / semantics
+- Keyword lists can be evaded by paraphrasing
+- No temporal drift detection
+- `company_profile` proxies `requirements`
         """)
 
-    st.divider()
-    st.markdown("#### 🔬 Pipeline")
-    st.code("""
-text → TF-IDF (5000 feats)
-    + behavioral (3 feats)
-    → LogisticRegression
-    → predict_proba()
-    → threshold @ 0.35
-    → composite risk score
-    → SHAP explanation
-    """, language="text")
     st.divider()
     st.caption("⚠️ Decision-support only. Always verify manually.")
 
-
 # =====================================================================
-# MAIN
+# MAIN CONTENT
 # =====================================================================
-st.title("🛡️ SCAMGUARD-AI")
-st.markdown("**Explainable Job Scam Detection** — Logistic Regression + TF-IDF + Behavioral Signals + SHAP")
-st.divider()
 
-# ── INPUT ──
-st.markdown('<div class="section-header">Input: Job Posting Details</div>', unsafe_allow_html=True)
+# ── TOPBAR ───────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="topbar">
+    <div class="topbar-brand">
+        <div class="topbar-icon">🛡️</div>
+        <div>
+            <div class="topbar-name">ScamGuard-AI</div>
+            <div class="topbar-sub">Explainable Fraud Detection</div>
+        </div>
+    </div>
+    <div class="topbar-status">
+        <div class="status-dot"></div>
+        Model Online
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ── HERO ─────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="hero">
+    <div class="hero-kicker">◈ Logistic Regression · TF-IDF · SHAP · Behavioral Signals</div>
+    <h1 class="hero-title">Job Scam <em>Risk Analyzer</em></h1>
+    <p class="hero-desc">
+        Paste any job posting. Get an explainable fraud risk score powered by
+        a trained ML model, behavioral heuristics, and SHAP attribution.
+    </p>
+    <div class="hero-rule"></div>
+</div>
+""", unsafe_allow_html=True)
+
+# ── STAT STRIP ───────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="stat-strip">
+    <div class="stat-box"><div class="stat-val">0.35</div><div class="stat-lbl">Decision Threshold</div></div>
+    <div class="stat-box"><div class="stat-val">5003</div><div class="stat-lbl">Feature Dims</div></div>
+    <div class="stat-box"><div class="stat-val">0.98</div><div class="stat-lbl">AUC-ROC</div></div>
+    <div class="stat-box"><div class="stat-val">~92%</div><div class="stat-lbl">Fraud Recall</div></div>
+    <div class="stat-box"><div class="stat-val">LR</div><div class="stat-lbl">Algorithm</div></div>
+</div>
+""", unsafe_allow_html=True)
+
+# ── INPUT FORM ───────────────────────────────────────────────────────────────
+st.markdown('<div class="slabel">Job Posting Input</div>', unsafe_allow_html=True)
+st.markdown('<div class="input-panel">', unsafe_allow_html=True)
 
 c1, c2 = st.columns(2, gap="large")
 with c1:
-    job_title       = st.text_input("Job Title",
-                                    placeholder="e.g. Data Entry Executive")
+    job_title       = st.text_input("Job Title", placeholder="e.g. Data Entry Executive")
     company_profile = st.text_area("Company Profile / Contact Info",
-                                   placeholder="Company details, email, phone…",
+                                   placeholder="Company details, email address, phone…",
                                    height=110)
 with c2:
-    salary_range    = st.text_input("Salary Range",
-                                    placeholder="e.g. ₹15,000/month  or leave blank")
+    salary_range    = st.text_input("Salary Range", placeholder="e.g. ₹15,000/month  or leave blank")
     job_description = st.text_area("Job Description",
                                    placeholder="Paste full job description here…",
                                    height=110)
 
-st.markdown("")
-_, mid, _ = st.columns([2, 1, 2])
-with mid:
-    run = st.button("🔍 Analyze Risk", type="primary", use_container_width=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
+_, mid, _ = st.columns([3, 1, 3])
+with mid:
+    run = st.button("🔍 Analyze Risk", use_container_width=True)
 
 # =====================================================================
 # ANALYSIS
@@ -413,17 +546,16 @@ if run:
         st.warning("Please enter at least a job title or description.")
         st.stop()
 
-    with st.spinner("Running analysis…"):
-        time.sleep(0.4)
+    with st.spinner("Running ML analysis…"):
+        time.sleep(0.35)
 
-    X_final, fd  = build_feature_vector(job_title, job_description,
-                                        company_profile, salary_range)
-    fraud_prob   = fraud_model.predict_proba(X_final)[0][1]
-    risk_score   = compute_risk_score(fraud_prob, fd)
-    lvl, lvl_pill, card_cls, advice = get_risk_level(risk_score)
+    X_final, fd   = build_feature_vector(job_title, job_description, company_profile, salary_range)
+    fraud_prob    = fraud_model.predict_proba(X_final)[0][1]
+    risk_score    = compute_risk_score(fraud_prob, fd)
+    lvl, lvl_pill, card_cls, accent_color, advice = get_risk_level(risk_score)
     conf, conf_pill = model_confidence(fraud_prob)
+    model_decision  = "FRAUD" if fraud_prob >= FRAUD_THRESHOLD else "LEGITIMATE"
 
-    # adjusted prob for contribution display
     if fraud_prob >= FRAUD_THRESHOLD:
         adj = 0.5 + (fraud_prob - FRAUD_THRESHOLD) / (1 - FRAUD_THRESHOLD) * 0.5
     else:
@@ -431,306 +563,296 @@ if run:
     adj = min(adj, 1.0) * 100
 
     driver, contributions = top_driver(adj, fd)
+    caps     = caps_ratio_fn(job_title + " " + job_description)
+    sus_sal  = suspicious_salary(salary_range)
 
-    # model's binary decision at tuned threshold
-    model_decision = "FRAUD" if fraud_prob >= FRAUD_THRESHOLD else "LEGITIMATE"
-    decision_color = "#d62728" if model_decision == "FRAUD" else "#2ca02c"
+    SCAM_EXTRA = [
+        "no experience required","work from home","earn up to","processing fee",
+        "registration fee","unlimited earnings","weekly payout","data entry","typing work","copy paste"
+    ]
+    matched_scam = [p for p in SCAM_EXTRA if p in (job_description + " " + job_title).lower()]
 
-    st.divider()
+    # ── SECTION 1: SUMMARY ───────────────────────────────────────────────────
+    st.markdown('<div class="slabel">① Risk Assessment Summary</div>', unsafe_allow_html=True)
 
-    # ── SECTION 1: RISK SUMMARY ──
-    st.markdown('<div class="section-header">① Risk Assessment Summary</div>',
-                unsafe_allow_html=True)
+    g_col, m_col = st.columns([1, 2.5], gap="large")
 
-    m1, m2, m3, m4, m5 = st.columns(5, gap="medium")
-    with m1:
+    with g_col:
+        bar_w = int(risk_score)
+        bar_color = accent_color
         st.markdown(f"""
-        <div class="metric-card {card_cls}">
-            <h4>Risk Score</h4>
-            <p>{risk_score}<span style="font-size:14px;color:#888;"> / 100</span></p>
-        </div>""", unsafe_allow_html=True)
-    with m2:
-        st.markdown(f"""
-        <div class="metric-card {card_cls}">
-            <h4>Risk Level</h4>
-            <p><span class="pill {lvl_pill}">{lvl}</span></p>
-        </div>""", unsafe_allow_html=True)
-    with m3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h4>ML Fraud Prob</h4>
-            <p>{fraud_prob:.1%}</p>
-        </div>""", unsafe_allow_html=True)
-    with m4:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h4>Model Decision</h4>
-            <p style="color:{decision_color};font-size:16px;">{model_decision}</p>
-            <small style="color:#888;font-size:11px;">@ threshold {FRAUD_THRESHOLD}</small>
-        </div>""", unsafe_allow_html=True)
-    with m5:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h4>Confidence</h4>
-            <p><span class="pill {conf_pill}">{conf}</span></p>
-        </div>""", unsafe_allow_html=True)
+<div class="gauge-wrap">
+    <div class="gauge-num" style="color:{accent_color};">{risk_score}</div>
+    <div class="gauge-label">Risk Score / 100</div>
+    <div class="gauge-bar-bg">
+        <div class="gauge-bar-fill" style="width:{bar_w}%;background:{accent_color};"></div>
+    </div>
+    <span class="pill {lvl_pill}" style="margin-top:8px;display:inline-block;">{lvl} RISK</span>
+</div>
+        """, unsafe_allow_html=True)
 
-    st.info(f"**Recommended Action:** {advice}")
-    st.markdown(f"**Primary Risk Driver:** `{driver}`")
+    with m_col:
+        col_a, col_b, col_c, col_d = st.columns(4, gap="small")
+        with col_a:
+            st.markdown(f"""
+<div class="mc {card_cls}">
+    <div class="mc-lbl">ML Fraud Prob</div>
+    <div class="mc-val {card_cls}">{fraud_prob:.1%}</div>
+</div>""", unsafe_allow_html=True)
+        with col_b:
+            dc = "danger" if model_decision == "FRAUD" else "good"
+            st.markdown(f"""
+<div class="mc {dc}">
+    <div class="mc-lbl">Model Verdict</div>
+    <div class="mc-val {dc}" style="font-size:1rem;">{model_decision}</div>
+    <div style="font-size:0.6rem;color:#40405a;margin-top:4px;">@ threshold {FRAUD_THRESHOLD}</div>
+</div>""", unsafe_allow_html=True)
+        with col_c:
+            st.markdown(f"""
+<div class="mc neutral">
+    <div class="mc-lbl">Confidence</div>
+    <div style="margin-top:6px;"><span class="pill {conf_pill}">{conf}</span></div>
+</div>""", unsafe_allow_html=True)
+        with col_d:
+            st.markdown(f"""
+<div class="mc neutral">
+    <div class="mc-lbl">Top Driver</div>
+    <div style="font-size:0.72rem;color:#9090a8;margin-top:6px;line-height:1.4;">{driver[:28]}…</div>
+</div>""", unsafe_allow_html=True)
 
-    if abs(fraud_prob - FRAUD_THRESHOLD) < 0.08:
-        st.warning(
-            f"⚡ **Borderline:** Model probability ({fraud_prob:.1%}) is very close to "
-            f"decision threshold ({FRAUD_THRESHOLD}). Manual review strongly recommended."
-        )
+        st.markdown(f'<div class="advisory" style="margin-top:0.75rem;"><b>Recommended Action:</b> {advice}</div>', unsafe_allow_html=True)
 
-    # ── SECTION 2: FEATURE BREAKDOWN ──
-    st.markdown('<div class="section-header">② Feature Signal Breakdown</div>',
-                unsafe_allow_html=True)
-    st.markdown("""
-    <div class="ds-note">
-    📌 <b>DS Note:</b> Features shown here are the <b>exact same features used during training</b>
-    (desc_length, urgency_score, free_email + TF-IDF text).
-    The rule-based signals like scam phrases are <i>additional</i> post-model indicators —
-    they are not in the trained model but help explain predictions behaviorally.
-    </div>""", unsafe_allow_html=True)
+        if abs(fraud_prob - FRAUD_THRESHOLD) < 0.08:
+            st.markdown(f'<div class="insight"><b>⚡ Borderline:</b> Model probability ({fraud_prob:.1%}) is very close to decision threshold ({FRAUD_THRESHOLD}). Manual review strongly recommended.</div>', unsafe_allow_html=True)
+
+    # ── SECTION 2: FEATURE BREAKDOWN ─────────────────────────────────────────
+    st.markdown('<div class="slabel">② Feature Signal Breakdown</div>', unsafe_allow_html=True)
+    st.markdown('<div class="ds-note"><b>DS Note:</b> Features below exactly match training features. Rule-based signals (scam phrases, caps, salary) are additive post-model indicators — not in the trained model, but useful for behavioral explanation.</div>', unsafe_allow_html=True)
 
     f1, f2 = st.columns(2, gap="large")
 
     with f1:
-        st.markdown("**Trained Model Features (exact match to training)**")
+        st.markdown('<p style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#40405a;margin-bottom:0.6rem;">Trained Model Features</p>', unsafe_allow_html=True)
 
-        st.markdown(f"**Free Email Domain** — {'🔴 DETECTED' if fd['free_email'] else '🟢 CLEAR'}")
-        st.caption("Training feature: `free_email` in company_profile")
+        email_status = "🔴 DETECTED" if fd["free_email"] else "🟢 CLEAR"
+        st.markdown(f"""
+<div class="feat-row">
+    <div>
+        <div class="feat-label">Free Email Domain</div>
+        <div class="feat-sub">Training feature: <code style="background:#1a1c22;color:#e85d5d;padding:1px 4px;border-radius:3px;">free_email</code> in company_profile</div>
+    </div>
+    <div class="feat-val">{email_status}</div>
+</div>""", unsafe_allow_html=True)
 
-        st.markdown(f"**Urgency Keywords** — `{fd['urgency']}` / {len(URGENCY_WORDS)} hits")
-        st.caption(f"Training feature: `urgency_score` | Words: {', '.join(URGENCY_WORDS)}")
-        st.progress(min(fd["urgency"] / len(URGENCY_WORDS), 1.0))
+        urg_pct = min(fd["urgency"] / len(URGENCY_WORDS), 1.0)
+        st.markdown(f"""
+<div class="feat-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+    <div style="display:flex;justify-content:space-between;width:100%;">
+        <div>
+            <div class="feat-label">Urgency Keywords</div>
+            <div class="feat-sub">Training feature: <code style="background:#1a1c22;color:#e85d5d;padding:1px 4px;border-radius:3px;">urgency_score</code></div>
+        </div>
+        <div class="feat-val">{fd['urgency']} / {len(URGENCY_WORDS)}</div>
+    </div>
+    <div class="mini-bar-bg" style="width:100%;"><div class="mini-bar-fill" style="width:{int(urg_pct*100)}%;"></div></div>
+</div>""", unsafe_allow_html=True)
 
-        st.markdown(f"**Description Length** — `{fd['desc_length']}` characters")
-        st.caption("Training feature: `desc_length` | Short (<200) = higher scam risk")
-        st.progress(min(fd["desc_length"] / 1000, 1.0))
+        desc_pct = min(fd["desc_length"] / 1000, 1.0)
+        st.markdown(f"""
+<div class="feat-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+    <div style="display:flex;justify-content:space-between;width:100%;">
+        <div>
+            <div class="feat-label">Description Length</div>
+            <div class="feat-sub">Training feature: <code style="background:#1a1c22;color:#e85d5d;padding:1px 4px;border-radius:3px;">desc_length</code> · Short &lt;200 = higher risk</div>
+        </div>
+        <div class="feat-val">{fd['desc_length']} chars</div>
+    </div>
+    <div class="mini-bar-bg" style="width:100%;"><div class="mini-bar-fill" style="width:{int(desc_pct*100)}%;background:#3b82f6;"></div></div>
+</div>""", unsafe_allow_html=True)
 
-        st.markdown("---")
-        st.markdown("**Score Contributions (aligned to training weights):**")
-        if PD_AVAILABLE:
+        if PD_AVAILABLE and contributions:
+            st.markdown('<p style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#40405a;margin:0.8rem 0 0.4rem;">Score Contributions</p>', unsafe_allow_html=True)
             rows = {k: round(v, 2) for k, v in contributions.items() if v > 0}
             df_c = pd.DataFrame.from_dict(rows, orient="index", columns=["Points"])
             df_c = df_c.sort_values("Points", ascending=False)
-            st.dataframe(df_c, use_container_width=True, height=180)
-        else:
-            for k, v in sorted(contributions.items(), key=lambda x: -x[1]):
-                if v > 0:
-                    st.markdown(f"- {k}: `{v:.1f} pts`")
+            st.dataframe(df_c, use_container_width=True, height=170)
 
     with f2:
-        st.markdown("**Additional Behavioral Signals (post-model)**")
-        st.caption("These are NOT in the trained model — they supplement the ML prediction")
+        st.markdown('<p style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#40405a;margin-bottom:0.6rem;">Additional Behavioral Signals</p>', unsafe_allow_html=True)
 
-        st.markdown(f"**Salary Provided** — {'🟢 YES' if not fd['salary_missing'] else '🔴 NO'}")
-        st.caption("Missing salary = opacity signal (used in risk scoring, not training)")
+        sal_status = "🟢 PROVIDED" if not fd["salary_missing"] else "🔴 MISSING"
+        st.markdown(f"""
+<div class="feat-row">
+    <div>
+        <div class="feat-label">Salary Info</div>
+        <div class="feat-sub">Opacity signal — not in training model</div>
+    </div>
+    <div class="feat-val">{sal_status}</div>
+</div>""", unsafe_allow_html=True)
 
-        # Scam phrase check (display only)
-        scam_phrases_extra = [
-            "no experience required", "work from home", "earn up to",
-            "processing fee", "registration fee", "unlimited earnings",
-            "weekly payout", "data entry", "typing work", "copy paste"
-        ]
-        matched_scam = [p for p in scam_phrases_extra
-                        if p in (job_description + " " + job_title).lower()]
-        st.markdown(f"**Scam Phrases Detected** — `{len(matched_scam)}`")
-        if matched_scam:
-            st.caption(f"Matched: *{', '.join(matched_scam[:5])}*")
-        st.progress(min(len(matched_scam) / 10, 1.0))
+        scam_pct = min(len(matched_scam) / 10, 1.0)
+        st.markdown(f"""
+<div class="feat-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+    <div style="display:flex;justify-content:space-between;width:100%;">
+        <div>
+            <div class="feat-label">Scam Phrases Detected</div>
+            <div class="feat-sub">{(', '.join(matched_scam[:4])) if matched_scam else 'None matched'}</div>
+        </div>
+        <div class="feat-val">{len(matched_scam)}</div>
+    </div>
+    <div class="mini-bar-bg" style="width:100%;"><div class="mini-bar-fill" style="width:{int(scam_pct*100)}%;background:#f59e0b;"></div></div>
+</div>""", unsafe_allow_html=True)
 
-        caps = caps_ratio_fn(job_title + " " + job_description)
-        st.markdown(f"**Caps/Hype Ratio** — `{caps:.0%}`")
-        st.progress(min(caps / 0.5, 1.0))
+        caps_pct = min(caps / 0.5, 1.0)
+        st.markdown(f"""
+<div class="feat-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+    <div style="display:flex;justify-content:space-between;width:100%;">
+        <div>
+            <div class="feat-label">Caps / Hype Ratio</div>
+            <div class="feat-sub">Proportion of ALL-CAPS words</div>
+        </div>
+        <div class="feat-val">{caps:.0%}</div>
+    </div>
+    <div class="mini-bar-bg" style="width:100%;"><div class="mini-bar-fill" style="width:{int(caps_pct*100)}%;background:#f59e0b;"></div></div>
+</div>""", unsafe_allow_html=True)
 
-        sus_sal = suspicious_salary(salary_range)
-        st.markdown(f"**Suspicious Salary** — {'🔴 FLAGGED' if sus_sal else '🟢 NORMAL'}")
-        st.caption("Vague language or > ₹5L/month claim")
+        sus_text = "🔴 FLAGGED" if sus_sal else "🟢 NORMAL"
+        st.markdown(f"""
+<div class="feat-row">
+    <div>
+        <div class="feat-label">Suspicious Salary</div>
+        <div class="feat-sub">Vague language or &gt;₹5L/month claim</div>
+    </div>
+    <div class="feat-val">{sus_text}</div>
+</div>""", unsafe_allow_html=True)
 
-
-    # ── SECTION 3: SHAP ──
-    st.markdown('<div class="section-header">③ SHAP Explainability — What drove this prediction?</div>',
-                unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="ds-note">
-    📌 <b>DS Note:</b> SHAP (SHapley Additive exPlanations) uses game theory to fairly distribute
-    the model's prediction across each feature. For Logistic Regression, SHAP values equal
-    <code>coef[i] × feature_value[i]</code> in log-odds space — making them mathematically exact.
-    Red = pushes toward FRAUD, Blue = pushes toward LEGITIMATE.
-    </div>""", unsafe_allow_html=True)
+    # ── SECTION 3: SHAP ──────────────────────────────────────────────────────
+    st.markdown('<div class="slabel">③ SHAP Explainability</div>', unsafe_allow_html=True)
+    st.markdown('<div class="ds-note"><b>DS Note:</b> SHAP uses game theory to fairly attribute the prediction across features. For Logistic Regression, SHAP = <code style="background:#1a2030;color:#3b82f6;padding:1px 4px;border-radius:3px;">coef[i] × feature_value[i]</code> in log-odds space — mathematically exact. <b style="color:#e85d5d;">Red → FRAUD</b> &nbsp;·&nbsp; <b style="color:#3b82f6;">Blue → LEGITIMATE</b>.</div>', unsafe_allow_html=True)
 
     if SHAP_AVAILABLE and MPL_AVAILABLE:
         with st.spinner("Computing SHAP values…"):
             try:
-                # LinearExplainer is correct for Logistic Regression
-                # (TreeExplainer only works for tree-based models)
-                explainer   = shap.LinearExplainer(
-                    fraud_model,
-                    shap.sample(X_final, 1),  # background = current sample (single prediction)
-                    feature_perturbation="interventional"
-                )
+                explainer   = shap.LinearExplainer(fraud_model, shap.sample(X_final, 1),
+                                                   feature_perturbation="interventional")
                 shap_values = explainer.shap_values(X_final)
-
-                if isinstance(shap_values, list):
-                    sv = np.array(shap_values[0]).flatten()
-                else:
-                    sv = np.array(shap_values).flatten()
-
-                # Align with feature names
-                n = min(len(sv), len(feature_names))
-                sv = sv[:n]
-                fn = feature_names[:n]
-
-                # Top 15 by absolute SHAP
+                sv = np.array(shap_values[0] if isinstance(shap_values, list) else shap_values).flatten()
+                n  = min(len(sv), len(feature_names))
+                sv, fn = sv[:n], feature_names[:n]
                 top_idx   = np.argsort(np.abs(sv))[-15:][::-1]
                 top_names = [fn[i] for i in top_idx]
                 top_vals  = sv[top_idx]
 
-                fig, ax = plt.subplots(figsize=(8, 5))
-                colors  = ["#d62728" if v > 0 else "#1f77b4" for v in top_vals]
-                ax.barh(range(len(top_names)), top_vals[::-1], color=colors[::-1])
+                plt.style.use("dark_background")
+                fig, ax = plt.subplots(figsize=(9, 5))
+                fig.patch.set_facecolor("#0f1014")
+                ax.set_facecolor("#0b0c0f")
+                colors = ["#e85d5d" if v > 0 else "#3b82f6" for v in top_vals]
+                ax.barh(range(len(top_names)), top_vals[::-1], color=colors[::-1], height=0.6)
                 ax.set_yticks(range(len(top_names)))
-                ax.set_yticklabels(top_names[::-1], fontsize=9)
-                ax.axvline(0, color="black", linewidth=0.8, linestyle="--")
-                ax.set_xlabel("SHAP Value  (+  → FRAUD,   −  → LEGIT)", fontsize=9)
+                ax.set_yticklabels(top_names[::-1], fontsize=8.5, color="#9090a8")
+                ax.axvline(0, color="#2a2c32", linewidth=1, linestyle="--")
+                ax.set_xlabel("SHAP Value  ( + → FRAUD  ·  − → LEGIT )", fontsize=8.5, color="#50506a")
                 ax.set_title("Top 15 Feature Contributions (SHAP — Logistic Regression)",
-                             fontweight="bold")
-                red_p  = mpatches.Patch(color="#d62728", label="→ FRAUD")
-                blue_p = mpatches.Patch(color="#1f77b4", label="→ LEGIT")
-                ax.legend(handles=[red_p, blue_p], fontsize=8)
+                             fontweight="bold", color="#c0bdb0", fontsize=10, pad=12)
+                ax.tick_params(colors="#50506a")
+                for spine in ax.spines.values(): spine.set_edgecolor("#1c1e24")
+                red_p  = mpatches.Patch(color="#e85d5d", label="→ FRAUD")
+                blue_p = mpatches.Patch(color="#3b82f6", label="→ LEGIT")
+                ax.legend(handles=[red_p, blue_p], fontsize=8, facecolor="#0f1014",
+                          edgecolor="#1c1e24", labelcolor="#9090a8")
                 plt.tight_layout()
                 st.pyplot(fig, use_container_width=True)
                 plt.close()
-
             except Exception as e:
                 st.warning(f"SHAP error: {e}")
-                st.markdown("**Fallback — Logistic Regression Coefficients (global importance):**")
-                if MPL_AVAILABLE:
-                    try:
-                        coeffs = fraud_model.coef_[0]
-                        n      = min(len(coeffs), len(feature_names))
-                        top_i  = np.argsort(np.abs(coeffs[:n]))[-15:][::-1]
-                        fig2, ax2 = plt.subplots(figsize=(8, 4))
-                        vals   = coeffs[top_i]
-                        names  = [feature_names[i] for i in top_i]
-                        colors = ["#d62728" if v > 0 else "#1f77b4" for v in vals]
-                        ax2.barh(range(len(names)), vals[::-1], color=colors[::-1])
-                        ax2.set_yticks(range(len(names)))
-                        ax2.set_yticklabels(names[::-1], fontsize=9)
-                        ax2.axvline(0, color="black", linewidth=0.8, linestyle="--")
-                        ax2.set_title("Top 15 LR Coefficients (global — not instance-level)",
-                                      fontweight="bold")
-                        plt.tight_layout()
-                        st.pyplot(fig2, use_container_width=True)
-                        plt.close()
-                    except Exception as e2:
-                        st.info(f"Coefficient plot also failed: {e2}")
     else:
         missing = []
         if not SHAP_AVAILABLE: missing.append("`pip install shap`")
         if not MPL_AVAILABLE:  missing.append("`pip install matplotlib`")
         st.info(f"Install to enable SHAP: {', '.join(missing)}")
 
-
-    # ── SECTION 4: CONTEXT ──
-    st.markdown('<div class="section-header">④ Risk Context Intelligence</div>',
-                unsafe_allow_html=True)
-
-    matched_scam_all = [p for p in scam_phrases_extra
-                        if p in (job_description + " " + job_title).lower()]
+    # ── SECTION 4: CONTEXT INTELLIGENCE ──────────────────────────────────────
+    st.markdown('<div class="slabel">④ Risk Context Intelligence</div>', unsafe_allow_html=True)
 
     if fd["free_email"] and fd["urgency"] > 1:
-        ctx = "**Pattern match:** Free email + urgency language. Strong combined signal — matches known mass scam campaign fingerprint."
+        ctx = "<b>Pattern match:</b> Free email + urgency language — matches known mass scam campaign fingerprint."
     elif sus_sal:
-        ctx = "**Salary anomaly:** Vague or unrealistically high salary detected — bait-and-switch tactic."
-    elif len(matched_scam_all) >= 3:
-        ctx = f"**High scam phrase density:** {len(matched_scam_all)} known scam phrases detected. Lexical fingerprint matches fraudulent postings."
+        ctx = "<b>Salary anomaly:</b> Vague or unrealistically high salary — classic bait-and-switch."
+    elif len(matched_scam) >= 3:
+        ctx = f"<b>High scam phrase density:</b> {len(matched_scam)} known scam phrases detected. Lexical fingerprint matches fraudulent postings."
     elif fd["urgency"] > 0:
-        ctx = "**Pressure tactic:** Urgency language reduces applicant due-diligence time — a documented manipulation technique."
+        ctx = "<b>Pressure tactic:</b> Urgency language reduces applicant due-diligence — a documented manipulation technique."
     elif fraud_prob >= FRAUD_THRESHOLD:
-        ctx = f"**ML model flagged this posting** (prob={fraud_prob:.1%} ≥ threshold={FRAUD_THRESHOLD}). Textual patterns in TF-IDF space match training fraud examples."
+        ctx = f"<b>ML model flagged:</b> Probability ({fraud_prob:.1%}) ≥ threshold ({FRAUD_THRESHOLD}). Textual TF-IDF patterns match training fraud examples."
     else:
-        ctx = "**No dominant pattern:** Behavioral features are clean. ML probability is the primary (weak) signal."
+        ctx = "<b>No dominant pattern:</b> Behavioral features are clean. ML probability is the primary (weak) signal."
 
-    st.markdown(f'<div class="insight-box">🧠 {ctx}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="insight">🧠 {ctx}</div>', unsafe_allow_html=True)
 
-    # ── SECTION 5: EXPLAINABILITY REPORT ──
+    # ── EXPANDERS ────────────────────────────────────────────────────────────
     with st.expander("🔍 Full Rule-Based Explainability Report"):
-        st.markdown("**Flags raised:**")
+        st.markdown('<div class="trace-box">', unsafe_allow_html=True)
         any_flag = False
+        flags_html = ""
         if fd["urgency"] > 0:
-            hit_words = [w for w in URGENCY_WORDS if w in job_description.lower()]
-            st.markdown(f"🔴 Urgency keywords: `{fd['urgency']}` hit(s) — *{', '.join(hit_words)}*")
+            hit = [w for w in URGENCY_WORDS if w in job_description.lower()]
+            flags_html += f'<div class="flag-row"><div class="flag-icon">🔴</div><div><div>Urgency keywords: <span style="color:#e85d5d;">{fd["urgency"]} hit(s)</span> — {", ".join(hit)}</div></div></div>'
             any_flag = True
         if fd["free_email"]:
             hit_d = [d for d in FREE_DOMAINS if d in company_profile.lower()]
-            st.markdown(f"🔴 Free email domain detected: `{''.join(hit_d)}`")
+            flags_html += f'<div class="flag-row"><div class="flag-icon">🔴</div><div><div>Free email domain: <span style="color:#e85d5d;">{"".join(hit_d)}</span></div></div></div>'
             any_flag = True
         if fd["salary_missing"]:
-            st.markdown("🟡 Salary not provided")
+            flags_html += '<div class="flag-row"><div class="flag-icon">🟡</div><div><div>Salary not provided</div></div></div>'
             any_flag = True
-        if matched_scam_all:
-            st.markdown(f"🟡 Scam phrases (extra signals): *{', '.join(matched_scam_all[:6])}*")
+        if matched_scam:
+            flags_html += f'<div class="flag-row"><div class="flag-icon">🟡</div><div><div>Scam phrases: {", ".join(matched_scam[:5])}</div></div></div>'
             any_flag = True
         if caps > 0.15:
-            st.markdown(f"🟡 High caps ratio: `{caps:.0%}`")
+            flags_html += f'<div class="flag-row"><div class="flag-icon">🟡</div><div><div>High caps ratio: {caps:.0%}</div></div></div>'
             any_flag = True
         if sus_sal:
-            st.markdown(f"🟡 Suspicious salary: `{salary_range}`")
+            flags_html += f'<div class="flag-row"><div class="flag-icon">🟡</div><div><div>Suspicious salary: {salary_range}</div></div></div>'
             any_flag = True
         if not any_flag:
-            st.markdown("✅ No rule-based flags raised")
+            flags_html = '<div style="color:#4ade80;font-size:0.82rem;">✅ No rule-based flags raised</div>'
+        st.markdown(flags_html, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown("---")
-        st.markdown("**Model decision trace:**")
         st.markdown(f"""
-        - Raw probability: `{fraud_prob:.4f}`
-        - Decision threshold: `{FRAUD_THRESHOLD}`
-        - Model verdict: `{model_decision}`
-        - Adjusted prob (for scoring): `{adj:.1f} pts`
-        - Final composite risk score: `{risk_score} / 100`
+<div class="trace-box" style="margin-top:0.75rem;">
+<span class="key">raw_probability   </span><span class="val">{fraud_prob:.4f}</span>
+<span class="key">decision_threshold</span><span class="val">{FRAUD_THRESHOLD}</span>
+<span class="key">model_verdict     </span><span class="{'val' if model_decision=='FRAUD' else 'ok'}">{model_decision}</span>
+<span class="key">adjusted_prob     </span><span class="val">{adj:.1f} pts</span>
+<span class="key">composite_score   </span><span class="{'val' if risk_score>=60 else 'warn' if risk_score>=30 else 'ok'}">{risk_score} / 100</span>
+<span class="key">risk_level        </span><span class="{'val' if lvl=='HIGH' else 'warn' if lvl=='MEDIUM' else 'ok'}">{lvl}</span>
+</div>
+        """, unsafe_allow_html=True)
+
+    with st.expander("📊 DS Insight Panel — Design Decisions"):
+        st.markdown(f"""
+#### Why Logistic Regression?
+LR is ideal for TF-IDF because sparse high-dimensional vectors suit a linear classifier.
+`coef_` gives direct per-feature importance — no post-hoc method needed.
+
+#### Why threshold = {FRAUD_THRESHOLD} instead of 0.5?
+`class_weight='balanced'` on ~5% fraud data calibrates sensitivity toward the minority class.
+Lowering threshold increases **recall** (fewer missed scams) at cost of some precision — the correct trade-off for a safety system.
+
+#### Why composite score instead of raw probability?
+LR captures textual/semantic signals but has no visibility into structural signals
+(salary fields, email domains). The composite score fuses ML semantics + behavioral rules.
+
+#### What would make this production-grade?
+1. Replace TF-IDF with **sentence-BERT** for semantic understanding
+2. Add **Platt scaling** for proper probability calibration
+3. Implement **data drift monitoring**
+4. **Active learning loop** — flag uncertain predictions for human review
+5. **Graph features** — fraud rings reuse infrastructure
         """)
 
-    # ── SECTION 6: DS INSIGHT PANEL ──
-    with st.expander("📊 DS Insight Panel — Design Decisions & Model Behaviour"):
-        st.markdown(f"""
-        #### Why Logistic Regression?
-        LR is ideal for TF-IDF features because TF-IDF produces sparse, high-dimensional
-        vectors where LR's linear classifier is computationally efficient and interpretable.
-        The `coef_` array directly gives per-feature importance — no post-hoc method needed.
-
-        #### Why threshold = {FRAUD_THRESHOLD} instead of 0.5?
-        With `class_weight='balanced'` on ~5% fraud data, the model is calibrated to be
-        more sensitive to the minority class. However, the default 0.5 threshold still
-        misses borderline cases. Lowering to {FRAUD_THRESHOLD} increases **recall**
-        (fewer missed scams) at the cost of some precision (more false alarms) —
-        which is the correct trade-off for a safety system.
-
-        #### Why composite score instead of just probability?
-        LR captures **textual/semantic fraud signals** but has no visibility into
-        *structural* signals like salary fields, email domains, or posting behaviour.
-        The composite score fuses ML (text semantics) + rules (structural signals).
-
-        #### Honest limitations of this system:
-        - **Keyword evasion:** Scammers can rephrase to avoid urgency words
-        - **No context window:** TF-IDF treats each word independently; 'not urgent' and 'urgent' score similarly
-        - **Training distribution:** Model trained on EMSCAD dataset — may not generalize to Indian job portals
-        - **Feature proxy:** UI uses `company_profile` instead of `requirements` — slight feature drift
-
-        #### What would make this production-grade?
-        1. Replace TF-IDF with **sentence-BERT** for semantic understanding
-        2. Add **Platt scaling** for proper probability calibration
-        3. Implement **data drift monitoring** (detect when scam language shifts)
-        4. **Active learning loop** — flag uncertain predictions for human review, retrain
-        5. **Graph features** — fraud rings reuse infrastructure (email domains, company names)
-        """)
-
-    # ── SECTION 7: ADVISORY ──
     with st.expander("✅ Defensive Checklist"):
         items = [
             ("Verify company on MCA21 / LinkedIn",     "Official registration eliminates ghost companies"),
@@ -741,12 +863,21 @@ if run:
             ("Google: [company] + scam/fraud",          "Many scam companies have reported complaints"),
             ("Verify recruiter on LinkedIn",            "Check profile age, connections, endorsements"),
         ]
-        for i, (t, d) in enumerate(items, 1):
-            st.markdown(f"**{i}. {t}** — *{d}*")
+        for i, (title, detail) in enumerate(items, 1):
+            st.markdown(f"""
+<div class="check-item">
+    <div class="check-num">{i}</div>
+    <div>
+        <div class="check-title">{title}</div>
+        <div class="check-detail">{detail}</div>
+    </div>
+</div>""", unsafe_allow_html=True)
 
-    st.divider()
-    st.caption(
-        f"SCAMGUARD-AI · Logistic Regression + TF-IDF · "
-        f"Decision threshold: {FRAUD_THRESHOLD} · "
-        f"Trained on EMSCAD dataset · Not a substitute for manual verification"
-    )
+# ── FOOTER ────────────────────────────────────────────────────────────────────
+st.markdown(f"""
+<div class="footer">
+    SCAMGUARD-AI &nbsp;·&nbsp; Logistic Regression + TF-IDF &nbsp;·&nbsp;
+    Decision threshold: <b>{FRAUD_THRESHOLD}</b> &nbsp;·&nbsp;
+    Trained on EMSCAD dataset &nbsp;·&nbsp; Not a substitute for manual verification
+</div>
+""", unsafe_allow_html=True)
