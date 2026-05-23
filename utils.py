@@ -6,9 +6,10 @@
 #   - Explainability       (mirrors expainabiity_and_insights.py)
 #   - EDA behavioral sigs  (mirrors eda.py)
 #   - SHAP computation     (exact LR formula: φᵢ = coef[i] × feature_value[i])
-# Imported by app.py at runtime.
+# Imported by app.py and api.py at runtime.
 # ==============================
 
+import re
 import numpy as np
 from scipy.sparse import hstack, issparse
 
@@ -32,6 +33,14 @@ SCAM_PHRASES = [
     "processing fee", "registration fee", "unlimited earnings",
     "weekly payout", "data entry", "typing work", "copy paste",
 ]
+
+# Suspicious salary keywords — mirrors eda.py salary analysis
+SUSPICIOUS_SALARY_KEYWORDS = [
+    "unlimited", "upto", "up to", "per day"
+]
+
+# Salary ceiling above which we flag as suspicious (INR)
+SUSPICIOUS_SALARY_CEILING = 500_000
 
 
 # ── BEHAVIORAL FEATURE FUNCTIONS (from 02_feature_engineering_and_mo...py) ────
@@ -66,21 +75,27 @@ def build_feature_vector(tfidf_vectorizer, job_title: str, job_description: str,
 
     Returns (X_final [sparse, 1×5003], feature_dict).
     """
+    # Sanitize inputs — guard against None
+    job_title       = str(job_title       or "").strip()
+    job_description = str(job_description or "").strip()
+    company_profile = str(company_profile or "").strip()
+    salary_range    = str(salary_range    or "").strip()
+
     combined_text = f"{job_title} {job_description} {company_profile}"
-    X_text     = tfidf_vectorizer.transform([combined_text])
+    X_text        = tfidf_vectorizer.transform([combined_text])
 
     d_len      = desc_length(job_description)
     urg        = urgency_score(job_description)
     free_em    = free_email_flag(company_profile)
 
-    X_behavior = np.array([[d_len, urg, free_em]])
+    X_behavior = np.array([[d_len, urg, free_em]], dtype=np.float64)
     X_final    = hstack([X_text, X_behavior])
 
     fd = {
         "desc_length":    d_len,
         "urgency":        urg,
-        "free_email":     free_em,
-        "salary_missing": int(not str(salary_range).strip()),
+        "free_email":     bool(free_em),
+        "salary_missing": int(not salary_range),
     }
     return X_final, fd
 
@@ -95,9 +110,13 @@ def compute_risk_score(fraud_prob: float, fd: dict) -> float:
                    + 0.15 × salary_missing
                    + 0.10 × free_email
     Clipped to [0, 100].
+
     The adj_prob remapping keeps the 0–50 range for sub-threshold
     and 50–100 range for super-threshold predictions.
     """
+    # Guard: clamp fraud_prob to valid probability range
+    fraud_prob = float(np.clip(fraud_prob, 0.0, 1.0))
+
     if fraud_prob >= FRAUD_THRESHOLD:
         adj = 0.5 + (fraud_prob - FRAUD_THRESHOLD) / (1 - FRAUD_THRESHOLD) * 0.5
     else:
@@ -110,11 +129,11 @@ def compute_risk_score(fraud_prob: float, fd: dict) -> float:
         0.60 * adj
         + 0.15 * urg_norm
         + 0.15 * fd["salary_missing"]
-        + 0.10 * fd["free_email"]
+        + 0.10 * int(fd["free_email"])
     ) * 100
 
     # Behavioral floor: if 2+ behavioral signals fire AND model says FRAUD, lift to ≥62
-    beh = (0.15 * urg_norm + 0.15 * fd["salary_missing"] + 0.10 * fd["free_email"]) * 100
+    beh = (0.15 * urg_norm + 0.15 * fd["salary_missing"] + 0.10 * int(fd["free_email"])) * 100
     if beh >= 20 and fraud_prob >= FRAUD_THRESHOLD:
         score = max(score, 62.0)
 
@@ -123,25 +142,34 @@ def compute_risk_score(fraud_prob: float, fd: dict) -> float:
 
 def get_risk_level(score: float):
     """Return (level, pill_class, card_class, accent_color, advice)."""
+    score = float(score)
     if score < 30:
-        return ("LOW",    "pill-green", "good",   "#aaaaaa",
-                "Job appears relatively safe. Verify company details independently.")
+        return (
+            "LOW", "pill-green", "good", "#aaaaaa",
+            "Job appears relatively safe. Verify company details independently."
+        )
     elif score < 60:
-        return ("MEDIUM", "pill-amber", "warn",   "#dddddd",
-                "Proceed with caution. Do not share documents or pay any fee.")
+        return (
+            "MEDIUM", "pill-amber", "warn", "#dddddd",
+            "Proceed with caution. Do not share documents or pay any fee."
+        )
     else:
-        return ("HIGH",   "pill-red",   "danger", "#ffffff",
-                "High scam risk. Do NOT apply or share personal information.")
+        return (
+            "HIGH", "pill-red", "danger", "#ffffff",
+            "High scam risk. Do NOT apply or share personal information."
+        )
 
 
 # ── MODEL CONFIDENCE (from expainabiity_and_insights.py) ─────────────────────
 
 def model_confidence(prob: float):
-    """Return (label, pill_class) based on distance from threshold."""
-    dist = abs(prob - FRAUD_THRESHOLD)
-    if dist >= 0.25:   return "High",               "pill-green"
-    elif dist >= 0.10: return "Moderate",            "pill-amber"
-    return               "Low (borderline)",         "pill-red"
+    """Return (label, pill_class) based on distance from decision threshold."""
+    dist = abs(float(prob) - FRAUD_THRESHOLD)
+    if dist >= 0.25:
+        return "High",             "pill-green"
+    elif dist >= 0.10:
+        return "Moderate",         "pill-amber"
+    return "Low (borderline)",     "pill-red"
 
 
 # ── FEATURE IMPORTANCE (from expainabiity_and_insights.py) ───────────────────
@@ -149,14 +177,14 @@ def model_confidence(prob: float):
 def get_feature_importance(model, feature_names):
     """
     Direct coef_-based importance — mirrors expainabiity_and_insights.py.
-    Returns sorted list of (feature_name, coefficient), highest abs first.
+    Returns sorted list of (feature_name, coefficient), highest |coef| first.
     """
     coefficients = model.coef_[0]
     n = min(len(coefficients), len(feature_names))
     paired = sorted(
         zip(feature_names[:n], coefficients[:n]),
         key=lambda x: abs(x[1]),
-        reverse=True
+        reverse=True,
     )
     return paired
 
@@ -169,24 +197,23 @@ def compute_shap_values(model, X_final, feature_names):
         φᵢ = coef[i] × feature_value[i]   (log-odds space)
         Σ φᵢ + intercept = log-odds = logit(P(fraud))
 
-    This is mathematically exact for linear models — not an approximation.
+    Mathematically exact for linear models — not an approximation.
     No shap library required.
 
     Returns:
-        shap_vals   : np.array shape (n_features,)
-        intercept   : float
-        log_odds    : float  (intercept + Σ φᵢ)
-        top_n_idx   : indices of top-N features by |φᵢ|
+        shap_vals : np.ndarray shape (n_features,)
+        intercept : float
+        log_odds  : float  (intercept + Σ φᵢ)
     """
     coef = model.coef_[0]
-    n = min(len(coef), len(feature_names))
+    n    = min(len(coef), len(feature_names))
     coef = coef[:n]
 
-    # Extract feature values from sparse or dense matrix
+    # Extract feature values — handles both sparse and dense
     if issparse(X_final):
-        x_vec = np.array(X_final.todense()).flatten()[:n]
+        x_vec = np.asarray(X_final.todense()).flatten()[:n]
     else:
-        x_vec = np.array(X_final).flatten()[:n]
+        x_vec = np.asarray(X_final).flatten()[:n]
 
     shap_vals = coef * x_vec                      # φᵢ = coef[i] × x[i]
     intercept = float(model.intercept_[0])
@@ -195,12 +222,15 @@ def compute_shap_values(model, X_final, feature_names):
     return shap_vals, intercept, log_odds
 
 
-def top_shap_features(shap_vals, feature_names, n=15):
+def top_shap_features(shap_vals, feature_names, n: int = 15):
     """
     Return top-n features sorted by |SHAP value|.
     Returns list of (name, shap_value) tuples.
+
+    Safe when shap_vals is all zeros — returns list with val=0.0
+    without raising ZeroDivisionError downstream.
     """
-    n_feats = min(len(shap_vals), len(feature_names))
+    n_feats    = min(len(shap_vals), len(feature_names))
     idx_sorted = np.argsort(np.abs(shap_vals[:n_feats]))[::-1][:n]
     return [(feature_names[i], float(shap_vals[i])) for i in idx_sorted]
 
@@ -208,7 +238,10 @@ def top_shap_features(shap_vals, feature_names, n=15):
 # ── ADDITIONAL BEHAVIORAL SIGNALS (from eda.py) ───────────────────────────────
 
 def caps_ratio(text: str) -> float:
-    """Proportion of ALL-CAPS words — from eda.py exploration."""
+    """
+    Proportion of ALL-CAPS words — from eda.py exploration.
+    Returns 0.0 for empty or whitespace-only input.
+    """
     words = str(text).split()
     if not words:
         return 0.0
@@ -216,20 +249,33 @@ def caps_ratio(text: str) -> float:
 
 
 def suspicious_salary(salary_text: str) -> int:
-    """Flag vague or unrealistically high salary — mirrors eda.py salary analysis."""
-    import re
-    if not str(salary_text).strip():
+    """
+    Flag vague or unrealistically high salary — mirrors eda.py salary analysis.
+    Returns 1 if suspicious, 0 otherwise.
+
+    Flags:
+      - Keywords: unlimited / upto / up to / per day
+      - Any numeric value above SUSPICIOUS_SALARY_CEILING (5,00,000 INR)
+    """
+    salary_text = str(salary_text or "").strip()
+    if not salary_text:
         return 0
-    sl = str(salary_text).lower()
-    if any(w in sl for w in ["unlimited", "upto", "up to", "per day"]):
+
+    sl = salary_text.lower()
+
+    # Keyword check
+    if any(kw in sl for kw in SUSPICIOUS_SALARY_KEYWORDS):
         return 1
+
+    # Numeric ceiling check
     nums = re.findall(r'\d[\d,]*', salary_text)
     if nums:
         try:
-            if max(int(n.replace(",", "")) for n in nums) > 500000:
+            if max(int(n.replace(",", "")) for n in nums) > SUSPICIOUS_SALARY_CEILING:
                 return 1
-        except Exception:
+        except (ValueError, OverflowError):
             pass
+
     return 0
 
 
@@ -237,14 +283,16 @@ def top_driver(adj_score: float, fd: dict):
     """
     Identify the single largest contributor to the composite risk score.
     Returns (top_driver_name, contributions_dict).
-    adj_score is already in 0–100 pts (the 0.60 × adj × 100 component).
+
+    adj_score is the 0–100 adjusted probability component
+    (before the 0.60 weight is applied).
     """
     urg_norm = min(fd["urgency"] / max(len(URGENCY_WORDS), 1), 1.0)
     contribs = {
-        "ML model fraud probability": round(adj_score * 0.60, 2),
+        "ML model fraud probability": round(float(adj_score) * 0.60, 2),
         "Urgency language":           round(urg_norm * 0.15 * 100, 2),
         "Missing salary info":        round(fd["salary_missing"] * 0.15 * 100, 2),
-        "Free/unverified email":      round(fd["free_email"] * 0.10 * 100, 2),
+        "Free/unverified email":      round(int(fd["free_email"]) * 0.10 * 100, 2),
     }
     active = {k: v for k, v in contribs.items() if v > 0}
     top    = max(active, key=active.get) if active else "No dominant driver"
@@ -252,6 +300,9 @@ def top_driver(adj_score: float, fd: dict):
 
 
 def matched_scam_phrases(job_title: str, job_description: str) -> list:
-    """Return list of SCAM_PHRASES found in title + description."""
-    combined = (job_description + " " + job_title).lower()
+    """
+    Return list of SCAM_PHRASES found in title + description.
+    Case-insensitive. Safe with empty/None inputs.
+    """
+    combined = (str(job_description or "") + " " + str(job_title or "")).lower()
     return [p for p in SCAM_PHRASES if p in combined]
