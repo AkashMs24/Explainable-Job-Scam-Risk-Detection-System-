@@ -783,7 +783,7 @@ if run:
 
     # ── Inline SHAP force bars (HTML — no matplotlib needed) ─────────────────
     max_abs = max((abs(v) for _, v in shap_top), default=0.0)
-max_abs = max_abs if max_abs > 0 else 1.0
+    max_abs = max_abs if max_abs > 0 else 1.0
     bars_html = ""
     for name, val in shap_top:
         pct      = min(abs(val) / max_abs * 46, 46)
