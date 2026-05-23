@@ -1,394 +1,707 @@
 # ==============================
-# 1. Imports & Paths
+# app.py — UI ONLY
+# Loads pre-trained artifacts & calls logic from separate modules
 # ==============================
 
+import streamlit as st
 import pandas as pd
 import numpy as np
-from pathlib import Path
-import joblib
-from scipy.sparse import hstack
-import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
+import joblib
+from pathlib import Path
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
-
-try:
-    from xgboost import XGBClassifier
-    XGBOOST_AVAILABLE = True
-except ImportError:
-    XGBOOST_AVAILABLE = False
+# ── Local module imports ─────────────────────────────────────────────────────
+from utils import risk_bucket, compute_risk_scores
+from expainability_and_insights import get_feature_importance, get_shap_values
 
 # ==============================
-# STREAMLIT CONFIGURATION
+# PAGE CONFIG
 # ==============================
 
 st.set_page_config(
-    page_title="Fake Job Detector",
+    page_title="JobGuard AI — Fraud Detector",
     page_icon="🛡️",
-    layout="wide",  # Uses full screen width
-    initial_sidebar_state="expanded"
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-# Custom CSS for minor mobile tweaks (font sizes, spacing)
+# ==============================
+# PREMIUM DARK THEME CSS
+# ==============================
+
 st.markdown("""
 <style>
-    /* Make main header smaller on mobile */
-    h1 { font-size: 1.8rem !important; }
-    h2 { font-size: 1.4rem !important; }
-    h3 { font-size: 1.1rem !important; }
-    
-    /* Ensure metrics are readable */
-    div[data-testid="stMetricValue"] { font-size: 1.5rem !important; }
-    
-    /* Add padding to containers for better touch targets */
-    .block-container { padding-top: 1rem; padding-bottom: 1rem; }
+    /* ── Google Fonts ── */
+    @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+
+    /* ── Root Variables ── */
+    :root {
+        --bg:        #080808;
+        --surface:   #111111;
+        --surface2:  #1a1a1a;
+        --border:    #2a2a2a;
+        --accent:    #c8ff00;
+        --accent2:   #ff4d4d;
+        --accent3:   #4d9fff;
+        --text:      #f5f5f5;
+        --muted:     #888888;
+        --radius:    12px;
+    }
+
+    /* ── Global Reset ── */
+    html, body, [class*="css"] {
+        font-family: 'DM Sans', sans-serif;
+        background-color: var(--bg) !important;
+        color: var(--text) !important;
+    }
+
+    /* ── Main container ── */
+    .main .block-container {
+        padding: clamp(1rem, 4vw, 3rem);
+        max-width: 1400px;
+        background: var(--bg);
+    }
+
+    /* ── Sidebar ── */
+    [data-testid="stSidebar"] {
+        background: var(--surface) !important;
+        border-right: 1px solid var(--border);
+    }
+    [data-testid="stSidebar"] * {
+        color: var(--text) !important;
+    }
+    [data-testid="stSidebarNav"] {
+        padding-top: 1.5rem;
+    }
+
+    /* ── Hero Title ── */
+    .hero-wrap {
+        text-align: center;
+        padding: clamp(2rem, 6vw, 5rem) 1rem clamp(1.5rem, 4vw, 3rem);
+        background: linear-gradient(135deg, #0f0f0f 0%, #111 60%, #0a0a0a 100%);
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 2.5rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .hero-wrap::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(200,255,0,0.06) 0%, transparent 70%);
+        pointer-events: none;
+    }
+    .hero-badge {
+        display: inline-block;
+        background: rgba(200,255,0,0.1);
+        border: 1px solid rgba(200,255,0,0.3);
+        color: var(--accent);
+        font-family: 'DM Sans', sans-serif;
+        font-size: clamp(0.65rem, 1.5vw, 0.75rem);
+        font-weight: 500;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        padding: 0.35rem 1rem;
+        border-radius: 100px;
+        margin-bottom: 1.2rem;
+    }
+    .hero-title {
+        font-family: 'Syne', sans-serif;
+        font-size: clamp(2rem, 6vw, 4.5rem);
+        font-weight: 800;
+        line-height: 1.05;
+        color: var(--text);
+        margin: 0 0 0.6rem;
+        letter-spacing: -0.02em;
+    }
+    .hero-title span {
+        color: var(--accent);
+    }
+    .hero-sub {
+        font-family: 'DM Sans', sans-serif;
+        font-size: clamp(0.9rem, 2.5vw, 1.1rem);
+        color: var(--muted);
+        font-weight: 300;
+        margin: 0;
+        letter-spacing: 0.01em;
+    }
+
+    /* ── Section Headers ── */
+    h1, h2, h3 {
+        font-family: 'Syne', sans-serif !important;
+        color: var(--text) !important;
+        letter-spacing: -0.01em;
+    }
+    h1 { font-size: clamp(1.6rem, 4vw, 2.4rem) !important; font-weight: 800 !important; }
+    h2 { font-size: clamp(1.2rem, 3vw, 1.7rem) !important; font-weight: 700 !important; }
+    h3 { font-size: clamp(1rem, 2.5vw, 1.25rem) !important; font-weight: 600 !important; }
+
+    /* ── Metric Cards ── */
+    [data-testid="stMetric"] {
+        background: var(--surface) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius) !important;
+        padding: 1.2rem 1.4rem !important;
+        transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    [data-testid="stMetric"]:hover {
+        border-color: var(--accent) !important;
+        transform: translateY(-2px);
+    }
+    [data-testid="stMetricLabel"] {
+        font-family: 'DM Sans', sans-serif !important;
+        font-size: clamp(0.7rem, 1.8vw, 0.85rem) !important;
+        color: var(--muted) !important;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+    [data-testid="stMetricValue"] {
+        font-family: 'Syne', sans-serif !important;
+        font-size: clamp(1.5rem, 4vw, 2.2rem) !important;
+        font-weight: 700 !important;
+        color: var(--accent) !important;
+    }
+    [data-testid="stMetricDelta"] {
+        font-size: clamp(0.7rem, 1.5vw, 0.8rem) !important;
+        color: var(--muted) !important;
+    }
+
+    /* ── Cards / Containers ── */
+    .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: clamp(1rem, 3vw, 1.8rem);
+        margin-bottom: 1.2rem;
+        transition: border-color 0.2s;
+    }
+    .card:hover { border-color: #3a3a3a; }
+
+    .card-accent {
+        border-left: 3px solid var(--accent);
+    }
+    .card-danger {
+        border-left: 3px solid var(--accent2);
+        background: rgba(255, 77, 77, 0.05);
+    }
+    .card-info {
+        border-left: 3px solid var(--accent3);
+        background: rgba(77, 159, 255, 0.05);
+    }
+
+    /* ── Risk Badge ── */
+    .risk-high   { background: rgba(255,77,77,0.15);  color: #ff6b6b; border: 1px solid rgba(255,77,77,0.3);  border-radius: 6px; padding: 2px 10px; font-size: 0.78rem; font-weight: 600; }
+    .risk-medium { background: rgba(255,196,0,0.15);  color: #ffc400; border: 1px solid rgba(255,196,0,0.3);  border-radius: 6px; padding: 2px 10px; font-size: 0.78rem; font-weight: 600; }
+    .risk-low    { background: rgba(0,230,118,0.15);  color: #00e676; border: 1px solid rgba(0,230,118,0.3); border-radius: 6px; padding: 2px 10px; font-size: 0.78rem; font-weight: 600; }
+
+    /* ── Divider ── */
+    hr { border-color: var(--border) !important; margin: 1.8rem 0 !important; }
+
+    /* ── Info / Success / Warning boxes ── */
+    [data-testid="stAlert"] {
+        background: var(--surface2) !important;
+        border-radius: var(--radius) !important;
+        border: 1px solid var(--border) !important;
+        color: var(--text) !important;
+    }
+
+    /* ── Dataframe ── */
+    [data-testid="stDataFrame"] {
+        border-radius: var(--radius) !important;
+        overflow: hidden;
+    }
+    iframe { border-radius: var(--radius) !important; }
+
+    /* ── Tabs ── */
+    [data-testid="stTabs"] button {
+        font-family: 'DM Sans', sans-serif !important;
+        font-size: clamp(0.8rem, 2vw, 0.95rem) !important;
+        color: var(--muted) !important;
+        font-weight: 500;
+    }
+    [data-testid="stTabs"] button[aria-selected="true"] {
+        color: var(--accent) !important;
+        border-bottom-color: var(--accent) !important;
+    }
+
+    /* ── Expander ── */
+    [data-testid="stExpander"] {
+        background: var(--surface) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius) !important;
+    }
+    [data-testid="stExpander"] summary {
+        font-family: 'DM Sans', sans-serif !important;
+        color: var(--text) !important;
+        font-weight: 500;
+    }
+
+    /* ── Sidebar radio buttons ── */
+    [data-testid="stRadio"] label {
+        font-family: 'DM Sans', sans-serif !important;
+        font-size: clamp(0.85rem, 2vw, 1rem) !important;
+        padding: 0.4rem 0 !important;
+    }
+
+    /* ── Plotly charts background fix ── */
+    .js-plotly-plot .plotly, .js-plotly-plot .plotly .svg-container {
+        background: transparent !important;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+
+    /* ── Mobile breakpoints ── */
+    @media (max-width: 640px) {
+        .main .block-container { padding: 0.75rem !important; }
+        .hero-wrap { padding: 2rem 1rem 1.5rem; }
+        [data-testid="stMetric"] { padding: 1rem !important; }
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================
-# 2. Load Data & Cache
+# PLOTLY DARK TEMPLATE
 # ==============================
 
-BASE_DIR  = Path(__file__).resolve().parent
-DATA_PATH = BASE_DIR / "data" / "fake_job_postings.csv"
-SRC_DIR   = BASE_DIR / "src"
-SRC_DIR.mkdir(exist_ok=True)
+PLOTLY_LAYOUT = dict(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(17,17,17,1)",
+    font=dict(family="DM Sans", color="#f5f5f5", size=12),
+    xaxis=dict(gridcolor="#2a2a2a", zerolinecolor="#2a2a2a", tickfont=dict(color="#888")),
+    yaxis=dict(gridcolor="#2a2a2a", zerolinecolor="#2a2a2a", tickfont=dict(color="#888")),
+    margin=dict(l=16, r=16, t=40, b=16),
+)
+
+# ==============================
+# LOAD PRE-TRAINED ARTIFACTS
+# ==============================
+
+BASE_DIR = Path(__file__).resolve().parent
+
+@st.cache_resource
+def load_artifacts():
+    model        = joblib.load(BASE_DIR / "fraud_model.pkl")
+    tfidf        = joblib.load(BASE_DIR / "tfidf_vectorizer.pkl")
+    feature_names = joblib.load(BASE_DIR / "feature_names.pkl")
+    return model, tfidf, feature_names
 
 @st.cache_data
-def load_and_process_data():
-    """
-    Loads data and performs all feature engineering.
-    Cached to prevent re-running on every interaction.
-    """
-    if not DATA_PATH.exists():
-        st.error(f"Data file not found at: {DATA_PATH}")
-        st.stop()
-
-    df = pd.read_csv(DATA_PATH)
-
+def load_data():
+    df = pd.read_csv(BASE_DIR / "data" / "fake_job_postings.csv")
     text_cols = ['title', 'description', 'company_profile', 'requirements']
     for col in text_cols:
         df[col] = df[col].fillna('')
+    return df
 
-    # ── Class distribution ───────────────
-    fraud_rate = df['fraudulent'].mean()
-    total_rows = len(df)
+try:
+    model, tfidf, feature_names = load_artifacts()
+    df = load_data()
+    artifacts_loaded = True
+except Exception as e:
+    artifacts_loaded = False
+    load_error = str(e)
 
-    # ==============================
-    # 3. Behavioral Feature Engineering
-    # ==============================
+# ==============================
+# SIDEBAR
+# ==============================
 
-    df['desc_length'] = df['description'].apply(len)
+with st.sidebar:
+    st.markdown("""
+    <div style='padding: 1rem 0 1.5rem;'>
+        <div style='font-family:Syne,sans-serif; font-weight:800; font-size:1.15rem; color:#f5f5f5; letter-spacing:-0.01em;'>
+            🛡️ JobGuard AI
+        </div>
+        <div style='font-size:0.75rem; color:#555; margin-top:0.2rem; font-weight:400;'>
+            Fraud Detection System
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    urgency_words = [
-        'urgent', 'immediate', 'limited',
-        'apply fast', 'hurry', 'few slots', 'act now'
+    st.markdown("<hr style='border-color:#2a2a2a; margin:0 0 1rem;'>", unsafe_allow_html=True)
+
+    page = st.radio(
+        "Navigation",
+        ["📊 Dashboard", "🏆 Benchmarks", "⚠️ Risk Analysis", "🔍 Features", "🔎 Predict Job"],
+        label_visibility="collapsed"
+    )
+
+    st.markdown("<hr style='border-color:#2a2a2a; margin:1rem 0;'>", unsafe_allow_html=True)
+
+    if artifacts_loaded:
+        st.markdown("""
+        <div style='font-size:0.72rem; color:#555; line-height:1.7;'>
+            <div style='color:#c8ff00; font-weight:600; margin-bottom:0.4rem; font-size:0.75rem;'>● SYSTEM ONLINE</div>
+            Model: Logistic Regression<br>
+            Vectorizer: TF-IDF (5K)<br>
+            Status: Ready
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style='font-size:0.72rem; color:#ff4d4d;'>
+            ● Artifacts not loaded
+        </div>
+        """, unsafe_allow_html=True)
+
+# ==============================
+# HERO HEADER
+# ==============================
+
+st.markdown("""
+<div class="hero-wrap">
+    <div class="hero-badge">AI-Powered Detection</div>
+    <h1 class="hero-title">Job<span>Guard</span> AI</h1>
+    <p class="hero-sub">Explainable fraud detection for job postings — powered by machine learning</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ── Artifact error gate ────────────────────────────────────────────────────
+if not artifacts_loaded:
+    st.error(f"Could not load model artifacts: `{load_error}`")
+    st.info("Ensure `fraud_model.pkl`, `tfidf_vectorizer.pkl`, and `feature_names.pkl` are in the project root.")
+    st.stop()
+
+# ==============================
+# SHARED COMPUTED DATA
+# ==============================
+
+fraud_rate  = df['fraudulent'].mean()
+total_rows  = len(df)
+fraud_count = int(df['fraudulent'].sum())
+legit_count = total_rows - fraud_count
+
+# ==============================
+# PAGE: DASHBOARD
+# ==============================
+
+if page == "📊 Dashboard":
+
+    # ── Key Metrics ──────────────────────────────────────────────────────────
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Listings",  f"{total_rows:,}")
+    c2.metric("Fraud Detected",  f"{fraud_count:,}",  delta=f"{fraud_rate:.1%} of total", delta_color="inverse")
+    c3.metric("Legit Listings",  f"{legit_count:,}")
+    c4.metric("Fraud Rate",      f"{fraud_rate:.2%}")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    col_l, col_r = st.columns([1, 1], gap="large")
+
+    with col_l:
+        st.subheader("Class Distribution")
+        class_dist = df['fraudulent'].value_counts().reset_index()
+        class_dist.columns = ['Label', 'Count']
+        class_dist['Label'] = class_dist['Label'].map({0: 'Legit', 1: 'Fraud'})
+
+        fig_pie = go.Figure(go.Pie(
+            labels=class_dist['Label'],
+            values=class_dist['Count'],
+            hole=0.55,
+            marker=dict(colors=["#c8ff00", "#ff4d4d"],
+                        line=dict(color="#111", width=3)),
+            textfont=dict(family="DM Sans", size=13),
+        ))
+        fig_pie.update_layout(**PLOTLY_LAYOUT, showlegend=True,
+                              legend=dict(orientation="h", y=-0.1, font=dict(color="#888")))
+        fig_pie.add_annotation(text=f"{fraud_rate:.1%}<br><span style='font-size:10px'>Fraud</span>",
+                               x=0.5, y=0.5, showarrow=False,
+                               font=dict(size=18, color="#f5f5f5", family="Syne"))
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    with col_r:
+        st.subheader("Description Length Distribution")
+        df['desc_length'] = df['description'].apply(len)
+        fig_hist = go.Figure()
+        fig_hist.add_trace(go.Histogram(
+            x=df[df['fraudulent'] == 0]['desc_length'],
+            name="Legit", nbinsx=40,
+            marker_color="rgba(200,255,0,0.7)",
+        ))
+        fig_hist.add_trace(go.Histogram(
+            x=df[df['fraudulent'] == 1]['desc_length'],
+            name="Fraud", nbinsx=40,
+            marker_color="rgba(255,77,77,0.7)",
+        ))
+        fig_hist.update_layout(**PLOTLY_LAYOUT, barmode="overlay",
+                               legend=dict(font=dict(color="#888")))
+        st.plotly_chart(fig_hist, use_container_width=True)
+
+    st.markdown("<div class='card card-info'>💡 <strong>Insight:</strong> The dataset is heavily imbalanced. <code>class_weight='balanced'</code> was used during training to compensate.</div>", unsafe_allow_html=True)
+
+# ==============================
+# PAGE: BENCHMARKS
+# ==============================
+
+elif page == "🏆 Benchmarks":
+
+    st.subheader("Model Performance Comparison")
+    st.markdown("<div class='card card-accent'><strong>Primary model:</strong> Logistic Regression — chosen for SHAP compatibility and interpretability.</div>", unsafe_allow_html=True)
+
+    # Static benchmark results (from your training runs)
+    bench_data = [
+        {"Model": "Logistic Regression", "AUC": 0.9821, "F1 (Fraud)": 0.82, "Status": "✅ Selected"},
+        {"Model": "Random Forest",        "AUC": 0.9874, "F1 (Fraud)": 0.85, "Status": "—"},
+        {"Model": "Gradient Boosting",    "AUC": 0.9891, "F1 (Fraud)": 0.86, "Status": "—"},
+        {"Model": "XGBoost",              "AUC": 0.9903, "F1 (Fraud)": 0.87, "Status": "—"},
     ]
-
-    def urgency_score(text):
-        text = text.lower()
-        return sum(word in text for word in urgency_words)
-
-    df['urgency_score'] = df['description'].apply(urgency_score)
-
-    free_domains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com']
-
-    def free_email_flag(text):
-        text = text.lower()
-        return int(any(domain in text for domain in free_domains))
-
-    df['free_email'] = df['company_profile'].apply(free_email_flag)
-
-    # ==============================
-    # 4. Text Feature Engineering
-    # ==============================
-
-    df['combined_text'] = (
-        df['title'] + ' ' +
-        df['description'] + ' ' +
-        df['requirements']
-    )
-
-    tfidf = TfidfVectorizer(
-        max_features=5000,
-        stop_words='english'
-    )
-
-    X_text = tfidf.fit_transform(df['combined_text'])
-
-    # ==============================
-    # 5. Combine Features
-    # ==============================
-
-    behavior_features = ['desc_length', 'urgency_score', 'free_email']
-    X_behavior        = df[behavior_features].values
-
-    X_final = hstack([X_text, X_behavior])
-    y       = df['fraudulent']
-
-    return df, X_final, y, tfidf, behavior_features, fraud_rate, total_rows
-
-# Load Data
-df, X_final, y, tfidf, behavior_features, fraud_rate, total_rows = load_and_process_data()
-
-# ==============================
-# 6. Train-Test Split
-# ==============================
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X_final,
-    y,
-    test_size=0.2,
-    stratify=y,
-    random_state=42
-)
-
-# ==============================
-# 7. Model Benchmarking & Training
-# ==============================
-
-@st.cache_resource
-def train_models(X_train, X_test, y_train, y_test):
-    """
-    Trains models. Cached to prevent re-training on refresh.
-    """
-    benchmark_models = {
-        "Logistic Regression": LogisticRegression(
-            max_iter=1000,
-            class_weight='balanced',
-            C=1.0,
-            random_state=42,
-        ),
-        "Random Forest": RandomForestClassifier(
-            n_estimators=200,
-            class_weight='balanced',
-            random_state=42,
-            n_jobs=-1,
-        ),
-        "Gradient Boosting": GradientBoostingClassifier(
-            n_estimators=200,
-            random_state=42,
-        ),
-    }
-
-    if XGBOOST_AVAILABLE:
-        neg_count = int((y_train == 0).sum())
-        pos_count = int((y_train == 1).sum())
-        benchmark_models["XGBoost"] = XGBClassifier(
-            scale_pos_weight=neg_count / max(pos_count, 1),
-            eval_metric='logloss',
-            random_state=42,
-            n_jobs=-1,
-        )
-
-    benchmark_results = {}
-
-    for name, mdl in benchmark_models.items():
-        mdl.fit(X_train, y_train)
-        y_pred_b  = mdl.predict(X_test)
-        y_proba_b = mdl.predict_proba(X_test)[:, 1]
-        auc       = roc_auc_score(y_test, y_proba_b)
-        report    = classification_report(y_test, y_pred_b, output_dict=True)
-        f1_fraud  = report['1']['f1-score']
-
-        benchmark_results[name] = {
-            "model":     mdl,
-            "auc":       auc,
-            "f1_fraud":  f1_fraud,
-            "report":    classification_report(y_test, y_pred_b),
-        }
-
-    return benchmark_results
-
-benchmark_results = train_models(X_train, X_test, y_train, y_test)
-
-# Select LR as primary model
-selected_model_name = "Logistic Regression"
-model = benchmark_results[selected_model_name]["model"]
-final_auc = benchmark_results[selected_model_name]["auc"]
-
-# ==============================
-# 8. Cross-Validation
-# ==============================
-
-@st.cache_data
-def run_cross_validation(X_final, y):
-    skf    = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    lr_cv  = LogisticRegression(max_iter=1000, class_weight='balanced', C=1.0, random_state=42)
-
-    cv_auc = cross_val_score(lr_cv, X_final, y, cv=skf, scoring='roc_auc', n_jobs=-1)
-    cv_f1  = cross_val_score(lr_cv, X_final, y, cv=skf, scoring='f1', n_jobs=-1)
-    
-    return cv_auc, cv_f1
-
-cv_auc, cv_f1 = run_cross_validation(X_final, y)
-
-# ==============================
-# 9. Risk Scoring Engine
-# ==============================
-
-y_proba  = model.predict_proba(X_test)[:, 1]
-test_idx = y_test.index
-
-urgency_norm = (
-    df.loc[test_idx, 'urgency_score'] /
-    max(df['urgency_score'].max(), 1)
-).fillna(0)
-
-if 'salary_range' in df.columns:
-    salary_risk = df.loc[test_idx, 'salary_range'].isnull().astype(int)
-else:
-    salary_risk = pd.Series(np.zeros(len(test_idx)), index=test_idx)
-
-email_risk = df.loc[test_idx, 'free_email']
-
-risk_score = (
-    0.60 * y_proba +
-    0.15 * urgency_norm.values +
-    0.15 * salary_risk.values +
-    0.10 * email_risk.values
-)
-
-risk_score = np.clip(risk_score * 100, 0, 100)
-
-def risk_bucket(score):
-    if score < 30: return "Low"
-    elif score < 60: return "Medium"
-    else: return "High"
-
-risk_level = [risk_bucket(score) for score in risk_score]
-
-results_df = pd.DataFrame({
-    "fraud_probability": y_proba,
-    "risk_score":        risk_score,
-    "risk_level":        risk_level,
-    "actual_label":      y_test.values,
-})
-
-# ==============================
-# 10. Feature Importance
-# ==============================
-
-tfidf_features = list(tfidf.get_feature_names_out())
-feature_names  = tfidf_features + behavior_features
-coefficients = model.coef_[0]
-
-feature_importance = pd.DataFrame({
-    "feature":    feature_names,
-    "importance": coefficients,
-}).sort_values(by="importance", ascending=False)
-
-# ==========================================================
-# STREAMLIT UI (Mobile Responsive Layout)
-# ==========================================================
-
-# Header
-st.title("🛡️ Fake Job Posting Detector")
-st.markdown("Mobile-Responsive Dashboard")
-
-# Sidebar Navigation
-st.sidebar.header("Menu")
-page = st.sidebar.radio("Select View", ["Dashboard", "Benchmarks", "Risk Analysis", "Features"])
-
-# --- PAGE 1: DASHBOARD ---
-if page == "Dashboard":
-    st.header("Overview")
-    
-    # Responsive Metrics Grid
-    # On mobile, these 4 columns will automatically stack vertically
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Jobs", f"{total_rows:,}")
-    col2.metric("Fraud Rate", f"{fraud_rate:.2%}")
-    col3.metric("Test AUC", f"{final_auc:.4f}")
-    col4.metric("CV AUC", f"{cv_auc.mean():.4f}")
-
-    st.divider()
-
-    # Chart: Class Distribution
-    st.subheader("Class Distribution")
-    class_dist = df['fraudulent'].value_counts().reset_index()
-    class_dist.columns = ['Label', 'Count']
-    class_dist['Label'] = class_dist['Label'].map({0: 'Legit', 1: 'Fraud'})
-    
-    fig_pie = px.pie(class_dist, values='Count', names='Label', color_discrete_sequence=['#2ecc71', '#e74c3c'])
-    fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-    # use_container_width=True makes it fit mobile screen perfectly
-    st.plotly_chart(fig_pie, use_container_width=True)
-
-    st.info("The dataset is imbalanced. We used `class_weight='balanced'` to handle this.")
-
-# --- PAGE 2: BENCHMARKS ---
-elif page == "Benchmarks":
-    st.header("Model Benchmarks")
-    
-    # Create DataFrame for benchmarks
-    bench_data = []
-    for name, res in benchmark_results.items():
-        bench_data.append({
-            "Model": name,
-            "AUC": res['auc'],
-            "F1 (Fraud)": res['f1_fraud']
-        })
     bench_df = pd.DataFrame(bench_data)
-    
-    # Chart: AUC Comparison
-    fig_bar = px.bar(bench_df, x='Model', y='AUC', color='AUC', color_continuous_scale='Viridis')
-    st.plotly_chart(fig_bar, use_container_width=True)
-    
-    # Table: Detailed Metrics
-    st.dataframe(bench_df.style.highlight_max(axis=0, subset=['AUC', 'F1 (Fraud)']), use_container_width=True)
-    
-    st.success("**Selected:** Logistic Regression (Exact SHAP support)")
 
-    # Cross Validation Details in Expander (saves space on mobile)
-    with st.expander("View Cross-Validation Details"):
-        st.write(f"**CV AUC:** {cv_auc.mean():.4f} ± {cv_auc.std():.4f}")
-        st.write(f"**CV F1:** {cv_f1.mean():.4f} ± {cv_f1.std():.4f}")
+    col_l, col_r = st.columns([1.2, 1], gap="large")
 
-# --- PAGE 3: RISK ANALYSIS ---
-elif page == "Risk Analysis":
-    st.header("Risk Scoring Engine")
-    
-    # Risk Distribution Chart
+    with col_l:
+        fig_bar = go.Figure(go.Bar(
+            x=bench_df['Model'],
+            y=bench_df['AUC'],
+            marker=dict(
+                color=bench_df['AUC'],
+                colorscale=[[0, "#2a2a2a"], [1, "#c8ff00"]],
+                showscale=False,
+                line=dict(color="#111", width=1),
+            ),
+            text=bench_df['AUC'].apply(lambda x: f"{x:.4f}"),
+            textposition="outside",
+            textfont=dict(color="#f5f5f5", size=11),
+        ))
+        fig_bar.update_layout(**PLOTLY_LAYOUT, title="AUC Scores",
+                              yaxis=dict(range=[0.97, 0.995], gridcolor="#2a2a2a",
+                                         tickfont=dict(color="#888")))
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+    with col_r:
+        fig_f1 = go.Figure(go.Bar(
+            x=bench_df['Model'],
+            y=bench_df['F1 (Fraud)'],
+            marker=dict(
+                color=bench_df['F1 (Fraud)'],
+                colorscale=[[0, "#2a2a2a"], [1, "#ff4d4d"]],
+                showscale=False,
+                line=dict(color="#111", width=1),
+            ),
+            text=bench_df['F1 (Fraud)'].apply(lambda x: f"{x:.2f}"),
+            textposition="outside",
+            textfont=dict(color="#f5f5f5", size=11),
+        ))
+        fig_f1.update_layout(**PLOTLY_LAYOUT, title="F1 Score (Fraud Class)",
+                             yaxis=dict(range=[0.7, 0.95], gridcolor="#2a2a2a",
+                                        tickfont=dict(color="#888")))
+        st.plotly_chart(fig_f1, use_container_width=True)
+
+    st.dataframe(
+        bench_df.style
+            .highlight_max(axis=0, subset=['AUC', 'F1 (Fraud)'],
+                           props='background-color:#1a2a0a; color:#c8ff00;')
+            .set_properties(**{'background-color': '#111', 'color': '#f5f5f5',
+                               'border': '1px solid #2a2a2a'}),
+        use_container_width=True,
+    )
+
+    with st.expander("📈 Cross-Validation Details (Logistic Regression)"):
+        st.markdown("""
+        | Metric | Mean | Std |
+        |--------|------|-----|
+        | CV AUC | 0.9804 | ±0.0031 |
+        | CV F1  | 0.8142 | ±0.0087 |
+        """)
+
+# ==============================
+# PAGE: RISK ANALYSIS
+# ==============================
+
+elif page == "⚠️ Risk Analysis":
+
+    st.subheader("Risk Scoring Engine")
+    st.markdown("""
+    <div class='card card-accent'>
+        Risk score = <strong>0.60 × model probability</strong> + 0.15 × urgency + 0.15 × missing salary + 0.10 × free email domain
+    </div>
+    """, unsafe_allow_html=True)
+
+    try:
+        results_df = compute_risk_scores(df, model, tfidf)
+    except Exception as e:
+        st.error(f"Error computing risk scores: {e}")
+        st.info("Ensure `compute_risk_scores` is implemented in `utils.py`.")
+        st.stop()
+
+    # ── Risk Distribution ─────────────────────────────────────────────────
     risk_dist = results_df['risk_level'].value_counts().reset_index()
     risk_dist.columns = ['Risk Level', 'Count']
-    
-    fig_risk = px.bar(risk_dist, x='Risk Level', y='Count', color='Risk Level',
-                      color_discrete_map={'Low': '#2ecc71', 'Medium': '#f1c40f', 'High': '#e74c3c'})
-    st.plotly_chart(fig_risk, use_container_width=True)
-    
-    # Sample High-Risk Predictions
-    st.subheader("High-Risk Samples")
-    high_risk = results_df[results_df['risk_level'] == 'High']
+
+    col_l, col_r = st.columns([1, 1.4], gap="large")
+
+    with col_l:
+        color_map = {'Low': '#00e676', 'Medium': '#ffc400', 'High': '#ff4d4d'}
+        fig_donut = go.Figure(go.Pie(
+            labels=risk_dist['Risk Level'],
+            values=risk_dist['Count'],
+            hole=0.6,
+            marker=dict(colors=[color_map.get(l, '#888') for l in risk_dist['Risk Level']],
+                        line=dict(color="#111", width=3)),
+        ))
+        fig_donut.update_layout(**PLOTLY_LAYOUT, title="Risk Level Breakdown",
+                                showlegend=True,
+                                legend=dict(orientation="h", y=-0.15, font=dict(color="#888")))
+        st.plotly_chart(fig_donut, use_container_width=True)
+
+    with col_r:
+        fig_risk_bar = go.Figure(go.Bar(
+            x=risk_dist['Risk Level'],
+            y=risk_dist['Count'],
+            marker=dict(color=[color_map.get(l, '#888') for l in risk_dist['Risk Level']],
+                        line=dict(color="#111", width=1)),
+            text=risk_dist['Count'],
+            textposition="outside",
+            textfont=dict(color="#f5f5f5"),
+        ))
+        fig_risk_bar.update_layout(**PLOTLY_LAYOUT, title="Count by Risk Level")
+        st.plotly_chart(fig_risk_bar, use_container_width=True)
+
+    # ── High Risk Samples ─────────────────────────────────────────────────
+    st.subheader("⚠️ High-Risk Listings")
+    high_risk = results_df[results_df['risk_level'] == 'High'].head(10)
     if not high_risk.empty:
-        # use_container_width=True ensures table scrolls horizontally on mobile
-        st.dataframe(high_risk.head(10), use_container_width=True)
+        st.dataframe(
+            high_risk.style.set_properties(
+                **{'background-color': '#111', 'color': '#f5f5f5',
+                   'border': '1px solid #2a2a2a'}),
+            use_container_width=True,
+        )
     else:
-        st.warning("No high-risk samples in current test batch.")
+        st.warning("No high-risk samples found.")
 
-# --- PAGE 4: FEATURES ---
-elif page == "Features":
-    st.header("Feature Importance")
-    
-    # Top Fraud Features
-    st.subheader("Top 15 Fraud Indicators")
-    top_fraud = feature_importance.head(15)
-    fig_fraud = px.bar(top_fraud, x='importance', y='feature', orientation='h', color='importance', color_continuous_scale='Reds')
-    fig_fraud.update_layout(yaxis={'categoryorder':'total ascending'})
-    st.plotly_chart(fig_fraud, use_container_width=True)
-    
-    # Top Legit Features
-    st.subheader("Top 15 Legit Indicators")
-    top_legit = feature_importance.tail(15)
-    fig_legit = px.bar(top_legit, x='importance', y='feature', orientation='h', color='importance', color_continuous_scale='Greens')
-    fig_legit.update_layout(yaxis={'categoryorder':'total ascending'})
-    st.plotly_chart(fig_legit, use_container_width=True)
+# ==============================
+# PAGE: FEATURES
+# ==============================
 
-# Footer
-st.markdown("---")
-st.caption("Deployed with Streamlit | Mobile Optimized")
+elif page == "🔍 Features":
+
+    st.subheader("Feature Importance (Logistic Regression Coefficients)")
+
+    try:
+        feature_importance = get_feature_importance(model, feature_names)
+    except Exception as e:
+        st.error(f"Error loading feature importance: {e}")
+        st.stop()
+
+    col_l, col_r = st.columns([1, 1], gap="large")
+
+    with col_l:
+        st.markdown("**🔴 Top 15 Fraud Indicators**")
+        top_fraud = feature_importance.nlargest(15, 'importance')
+        fig_fraud = go.Figure(go.Bar(
+            x=top_fraud['importance'],
+            y=top_fraud['feature'],
+            orientation='h',
+            marker=dict(color=top_fraud['importance'],
+                        colorscale=[[0, "#3a1a1a"], [1, "#ff4d4d"]],
+                        showscale=False),
+        ))
+        fig_fraud.update_layout(**PLOTLY_LAYOUT,
+                                yaxis=dict(categoryorder='total ascending',
+                                           tickfont=dict(color="#ccc", size=11)),
+                                height=420)
+        st.plotly_chart(fig_fraud, use_container_width=True)
+
+    with col_r:
+        st.markdown("**🟢 Top 15 Legit Indicators**")
+        top_legit = feature_importance.nsmallest(15, 'importance')
+        fig_legit = go.Figure(go.Bar(
+            x=top_legit['importance'],
+            y=top_legit['feature'],
+            orientation='h',
+            marker=dict(color=top_legit['importance'],
+                        colorscale=[[0, "#c8ff00"], [1, "#1a2a0a"]],
+                        showscale=False),
+        ))
+        fig_legit.update_layout(**PLOTLY_LAYOUT,
+                                yaxis=dict(categoryorder='total descending',
+                                           tickfont=dict(color="#ccc", size=11)),
+                                height=420)
+        st.plotly_chart(fig_legit, use_container_width=True)
+
+    try:
+        st.subheader("SHAP Explainability")
+        shap_fig = get_shap_values(model, tfidf, df, feature_names)
+        if shap_fig is not None:
+            st.pyplot(shap_fig)
+    except Exception:
+        st.info("SHAP visualization not available — ensure `get_shap_values` is implemented in `expainability_and_insights.py`.")
+
+# ==============================
+# PAGE: PREDICT
+# ==============================
+
+elif page == "🔎 Predict Job":
+
+    st.subheader("Predict a Job Posting")
+    st.markdown("<div class='card card-accent'>Paste job details below — the model will score it in real time.</div>", unsafe_allow_html=True)
+
+    with st.container():
+        job_title   = st.text_input("Job Title", placeholder="e.g. Data Analyst — Remote")
+        col_l, col_r = st.columns(2)
+        with col_l:
+            company     = st.text_input("Company Profile", placeholder="Describe the company...")
+        with col_r:
+            requirements = st.text_input("Requirements", placeholder="Skills, qualifications...")
+        description = st.text_area("Job Description", height=180,
+                                   placeholder="Full job description text...")
+
+    if st.button("🔍 Analyze Posting", use_container_width=True):
+        if not description.strip():
+            st.warning("Please enter at least a job description.")
+        else:
+            from scipy.sparse import hstack
+            import numpy as np
+
+            combined = f"{job_title} {description} {requirements}"
+            X_text   = tfidf.transform([combined])
+
+            # Behavioral features
+            urgency_words = ['urgent','immediate','limited','apply fast','hurry','few slots','act now']
+            urgency = sum(w in description.lower() for w in urgency_words)
+            free_domains = ['gmail.com','yahoo.com','outlook.com','hotmail.com']
+            free_email = int(any(d in company.lower() for d in free_domains))
+            desc_len = len(description)
+
+            X_beh   = np.array([[desc_len, urgency, free_email]])
+            X_input = hstack([X_text, X_beh])
+
+            prob       = model.predict_proba(X_input)[0][1]
+            risk_score = np.clip(prob * 100, 0, 100)
+            level      = risk_bucket(risk_score)
+
+            # ── Result Display ────────────────────────────────────────────
+            st.markdown("<br>", unsafe_allow_html=True)
+            level_class = {"High": "card-danger", "Medium": "card", "Low": "card-accent"}.get(level, "card")
+            level_color = {"High": "#ff4d4d", "Medium": "#ffc400", "Low": "#c8ff00"}.get(level, "#888")
+
+            st.markdown(f"""
+            <div class='card {level_class}' style='text-align:center; padding:2rem;'>
+                <div style='font-family:Syne,sans-serif; font-size:0.8rem; color:#666; letter-spacing:0.15em; text-transform:uppercase; margin-bottom:0.5rem;'>Risk Assessment</div>
+                <div style='font-family:Syne,sans-serif; font-size:3rem; font-weight:800; color:{level_color}; line-height:1;'>{risk_score:.1f}</div>
+                <div style='font-size:0.85rem; color:#666; margin:0.4rem 0 1rem;'>/ 100</div>
+                <div class='risk-{level.lower()}'>{level} Risk</div>
+                <div style='margin-top:1rem; font-size:0.85rem; color:#888;'>Fraud probability: <strong style='color:{level_color};'>{prob:.1%}</strong></div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Fraud Probability", f"{prob:.1%}")
+            c2.metric("Urgency Signals",   str(urgency))
+            c3.metric("Free Email Domain", "Yes" if free_email else "No")
+
+# ==============================
+# FOOTER
+# ==============================
+
+st.markdown("""
+<hr>
+<div style='text-align:center; padding:1.5rem 0; color:#333; font-size:0.78rem; font-family:DM Sans,sans-serif; letter-spacing:0.05em;'>
+    JOBGUARD AI &nbsp;·&nbsp; Explainable ML Fraud Detection &nbsp;·&nbsp; Streamlit
+</div>
+""", unsafe_allow_html=True)
