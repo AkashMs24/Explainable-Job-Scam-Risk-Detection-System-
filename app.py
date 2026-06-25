@@ -10,6 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import joblib
 from pathlib import Path
+import io
 
 # ── Local module imports ─────────────────────────────────────────────────────
 from utils import (
@@ -41,10 +42,8 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* ── Google Fonts ── */
     @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
 
-    /* ── Root Variables ── */
     :root {
         --bg:        #080808;
         --surface:   #111111;
@@ -58,21 +57,18 @@ st.markdown("""
         --radius:    12px;
     }
 
-    /* ── Global Reset ── */
     html, body, [class*="css"] {
         font-family: 'DM Sans', sans-serif;
         background-color: var(--bg) !important;
         color: var(--text) !important;
     }
 
-    /* ── Main container ── */
     .main .block-container {
         padding: clamp(1rem, 4vw, 3rem);
         max-width: 1400px;
         background: var(--bg);
     }
 
-    /* ── Sidebar ── */
     [data-testid="stSidebar"] {
         background: var(--surface) !important;
         border-right: 1px solid var(--border);
@@ -84,7 +80,6 @@ st.markdown("""
         padding-top: 1.5rem;
     }
 
-    /* ── Hero Title ── */
     .hero-wrap {
         text-align: center;
         padding: clamp(2rem, 6vw, 5rem) 1rem clamp(1.5rem, 4vw, 3rem);
@@ -136,7 +131,6 @@ st.markdown("""
         letter-spacing: 0.01em;
     }
 
-    /* ── Section Headers ── */
     h1, h2, h3 {
         font-family: 'Syne', sans-serif !important;
         color: var(--text) !important;
@@ -146,7 +140,6 @@ st.markdown("""
     h2 { font-size: clamp(1.2rem, 3vw, 1.7rem) !important; font-weight: 700 !important; }
     h3 { font-size: clamp(1rem, 2.5vw, 1.25rem) !important; font-weight: 600 !important; }
 
-    /* ── Metric Cards ── */
     [data-testid="stMetric"] {
         background: var(--surface) !important;
         border: 1px solid var(--border) !important;
@@ -176,7 +169,6 @@ st.markdown("""
         color: var(--muted) !important;
     }
 
-    /* ── Cards / Containers ── */
     .card {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -187,9 +179,7 @@ st.markdown("""
     }
     .card:hover { border-color: #3a3a3a; }
 
-    .card-accent {
-        border-left: 3px solid var(--accent);
-    }
+    .card-accent { border-left: 3px solid var(--accent); }
     .card-danger {
         border-left: 3px solid var(--accent2);
         background: rgba(255, 77, 77, 0.05);
@@ -199,15 +189,12 @@ st.markdown("""
         background: rgba(77, 159, 255, 0.05);
     }
 
-    /* ── Risk Badge ── */
     .risk-high   { background: rgba(255,77,77,0.15);  color: #ff6b6b; border: 1px solid rgba(255,77,77,0.3);  border-radius: 6px; padding: 2px 10px; font-size: 0.78rem; font-weight: 600; }
     .risk-medium { background: rgba(255,196,0,0.15);  color: #ffc400; border: 1px solid rgba(255,196,0,0.3);  border-radius: 6px; padding: 2px 10px; font-size: 0.78rem; font-weight: 600; }
     .risk-low    { background: rgba(0,230,118,0.15);  color: #00e676; border: 1px solid rgba(0,230,118,0.3); border-radius: 6px; padding: 2px 10px; font-size: 0.78rem; font-weight: 600; }
 
-    /* ── Divider ── */
     hr { border-color: var(--border) !important; margin: 1.8rem 0 !important; }
 
-    /* ── Info / Success / Warning boxes ── */
     [data-testid="stAlert"] {
         background: var(--surface2) !important;
         border-radius: var(--radius) !important;
@@ -215,14 +202,12 @@ st.markdown("""
         color: var(--text) !important;
     }
 
-    /* ── Dataframe ── */
     [data-testid="stDataFrame"] {
         border-radius: var(--radius) !important;
         overflow: hidden;
     }
     iframe { border-radius: var(--radius) !important; }
 
-    /* ── Tabs ── */
     [data-testid="stTabs"] button {
         font-family: 'DM Sans', sans-serif !important;
         font-size: clamp(0.8rem, 2vw, 0.95rem) !important;
@@ -234,7 +219,6 @@ st.markdown("""
         border-bottom-color: var(--accent) !important;
     }
 
-    /* ── Expander ── */
     [data-testid="stExpander"] {
         background: var(--surface) !important;
         border: 1px solid var(--border) !important;
@@ -246,25 +230,21 @@ st.markdown("""
         font-weight: 500;
     }
 
-    /* ── Sidebar radio buttons ── */
     [data-testid="stRadio"] label {
         font-family: 'DM Sans', sans-serif !important;
         font-size: clamp(0.85rem, 2vw, 1rem) !important;
         padding: 0.4rem 0 !important;
     }
 
-    /* ── Plotly charts background fix ── */
     .js-plotly-plot .plotly, .js-plotly-plot .plotly .svg-container {
         background: transparent !important;
     }
 
-    /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: var(--surface); }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
 
-    /* ── Mobile breakpoints ── */
     @media (max-width: 640px) {
         .main .block-container { padding: 0.75rem !important; }
         .hero-wrap { padding: 2rem 1rem 1.5rem; }
@@ -284,7 +264,6 @@ PLOTLY_LAYOUT = dict(
     margin=dict(l=16, r=16, t=40, b=16),
 )
 
-# Default axis style — merge manually when no override needed
 AXIS_STYLE = dict(gridcolor="#2a2a2a", zerolinecolor="#2a2a2a", tickfont=dict(color="#888"))
 
 # ==============================
@@ -295,8 +274,8 @@ BASE_DIR = Path(__file__).resolve().parent
 
 @st.cache_resource
 def load_artifacts():
-    model        = joblib.load(BASE_DIR / "fraud_model.pkl")
-    tfidf        = joblib.load(BASE_DIR / "tfidf_vectorizer.pkl")
+    model         = joblib.load(BASE_DIR / "fraud_model.pkl")
+    tfidf         = joblib.load(BASE_DIR / "tfidf_vectorizer.pkl")
     feature_names = joblib.load(BASE_DIR / "feature_names.pkl")
     return model, tfidf, feature_names
 
@@ -304,7 +283,6 @@ def load_artifacts():
 def load_data():
     csv_path = BASE_DIR / "data" / "fake_job_postings.csv"
 
-    # ── If CSV missing, download from Google Drive ──────────────────────────
     if not csv_path.exists():
         try:
             import requests
@@ -317,7 +295,6 @@ def load_data():
                 session  = requests.Session()
                 response = session.get(url, stream=True)
 
-                # Handle Google large-file confirmation token
                 confirm_token = None
                 for key, value in response.cookies.items():
                     if key.startswith("download_warning"):
@@ -403,7 +380,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Artifact error gate ────────────────────────────────────────────────────
 if not artifacts_loaded:
     st.error(f"Could not load model artifacts: `{load_error}`")
     st.info("Ensure `fraud_model.pkl`, `tfidf_vectorizer.pkl`, and `feature_names.pkl` are in the project root.")
@@ -424,7 +400,6 @@ legit_count = total_rows - fraud_count
 
 if page == "📊 Dashboard":
 
-    # ── Key Metrics ──────────────────────────────────────────────────────────
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total Listings",  f"{total_rows:,}")
     c2.metric("Fraud Detected",  f"{fraud_count:,}",  delta=f"{fraud_rate:.1%} of total", delta_color="inverse")
@@ -485,7 +460,6 @@ elif page == "🏆 Benchmarks":
     st.subheader("Model Performance Comparison")
     st.markdown("<div class='card card-accent'><strong>Primary model:</strong> Logistic Regression — chosen for SHAP compatibility and interpretability.</div>", unsafe_allow_html=True)
 
-    # Static benchmark results (from your training runs)
     bench_data = [
         {"Model": "Logistic Regression", "AUC": 0.9821, "F1 (Fraud)": 0.82, "Status": "✅ Selected"},
         {"Model": "Random Forest",        "AUC": 0.9874, "F1 (Fraud)": 0.85, "Status": "—"},
@@ -589,7 +563,6 @@ elif page == "⚠️ Risk Analysis":
         st.error(f"Error computing risk scores: {e}")
         st.stop()
 
-    # ── Risk Distribution ─────────────────────────────────────────────────
     risk_dist = results_df['risk_level'].value_counts().reset_index()
     risk_dist.columns = ['Risk Level', 'Count']
 
@@ -622,7 +595,6 @@ elif page == "⚠️ Risk Analysis":
         fig_risk_bar.update_layout(**PLOTLY_LAYOUT, xaxis=AXIS_STYLE, yaxis=AXIS_STYLE, title="Count by Risk Level")
         st.plotly_chart(fig_risk_bar, use_container_width=True)
 
-    # ── High Risk Samples ─────────────────────────────────────────────────
     st.subheader("⚠️ High-Risk Listings")
     high_risk = results_df[results_df['risk_level'] == 'HIGH'].head(10)
     if not high_risk.empty:
@@ -686,85 +658,193 @@ elif page == "🔍 Features":
         st.plotly_chart(fig_legit, use_container_width=True)
 
 # ==============================
-# PAGE: PREDICT
+# PAGE: PREDICT  (now with file upload support)
 # ==============================
 
 elif page == "🔎 Predict Job":
 
+    # ── Extraction helper ────────────────────────────────────────────────────
+    def extract_text_from_file(uploaded_file):
+        """Extract text from an uploaded PDF or image (OCR)."""
+        import pdfplumber
+        import pytesseract
+        from PIL import Image
+
+        filename = uploaded_file.name.lower()
+        file_bytes = uploaded_file.read()
+
+        if filename.endswith(".pdf"):
+            text = ""
+            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                for pg in pdf.pages:
+                    page_text = pg.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+            return text.strip()
+
+        elif filename.endswith((".png", ".jpg", ".jpeg", ".webp")):
+            image = Image.open(io.BytesIO(file_bytes))
+            return pytesseract.image_to_string(image).strip()
+
+        return ""
+
+    # ── Shared rendering for the results card + charts ──────────────────────
+    def render_results(job_title, description, company, key_prefix):
+        if not description or not description.strip():
+            st.warning("Please provide at least a job description.")
+            return
+
+        X_input, fd = build_feature_vector(tfidf, job_title, description, company, "")
+        prob        = model.predict_proba(X_input)[0][1]
+        risk_score  = compute_risk_score(prob, fd)
+        level, _, _, level_color, advice = get_risk_level(risk_score)
+        scam_hits   = matched_scam_phrases(job_title, description)
+
+        adj = (0.5 + (prob - FRAUD_THRESHOLD) / (1 - FRAUD_THRESHOLD) * 0.5) if prob >= FRAUD_THRESHOLD else (prob / FRAUD_THRESHOLD * 0.5)
+        _, contribs = top_driver(adj * 100, fd)
+
+        shap_vals, _, _ = compute_shap_values(model, X_input, feature_names)
+        top_feats = top_shap_features(shap_vals, feature_names, n=8)
+
+        level_class = {"HIGH": "card-danger", "MEDIUM": "card", "LOW": "card-accent"}.get(level, "card")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div class='card {level_class}' style='text-align:center;padding:2rem;'>"
+            f"<div style='font-family:Syne,sans-serif;font-size:0.8rem;color:#666;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.5rem;'>Risk Assessment</div>"
+            f"<div style='font-family:Syne,sans-serif;font-size:3rem;font-weight:800;color:{level_color};line-height:1;'>{risk_score:.1f}</div>"
+            f"<div style='font-size:0.85rem;color:#666;margin:0.4rem 0 1rem;'>/ 100</div>"
+            f"<div class='risk-{level.lower()}'>{level} Risk</div>"
+            f"<div style='margin-top:1rem;font-size:0.85rem;color:#aaa;'>Fraud probability: <strong style='color:{level_color};'>{prob:.1%}</strong></div>"
+            f"<div style='margin-top:0.5rem;font-size:0.82rem;color:#888;'>{advice}</div>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Fraud Probability", f"{prob:.1%}")
+        c2.metric("Risk Score",        f"{risk_score:.1f} / 100")
+        c3.metric("Urgency Signals",   str(fd["urgency"]))
+        c4.metric("Free Email",        "Yes" if fd["free_email"] else "No")
+
+        st.markdown("<br>**Risk Score Breakdown**", unsafe_allow_html=True)
+        driver_df = pd.DataFrame(list(contribs.items()), columns=["Driver", "Points"])
+        fig_d = go.Figure(go.Bar(
+            x=driver_df["Points"], y=driver_df["Driver"], orientation="h",
+            marker=dict(color="#c8ff00", line=dict(color="#111", width=1)),
+        ))
+        fig_d.update_layout(**PLOTLY_LAYOUT, xaxis=AXIS_STYLE, yaxis=AXIS_STYLE, height=220)
+        st.plotly_chart(fig_d, use_container_width=True, key=f"{key_prefix}_driver_chart")
+
+        st.markdown("**Top Influencing Words / Features**")
+        shap_df = pd.DataFrame(top_feats, columns=["Feature", "SHAP Value"])
+        shap_colors = ["#ff4d4d" if v > 0 else "#c8ff00" for v in shap_df["SHAP Value"]]
+        fig_s = go.Figure(go.Bar(
+            x=shap_df["SHAP Value"], y=shap_df["Feature"], orientation="h",
+            marker=dict(color=shap_colors, line=dict(color="#111", width=1)),
+        ))
+        fig_s.update_layout(**PLOTLY_LAYOUT, height=300,
+                            xaxis=AXIS_STYLE,
+                            yaxis=dict(categoryorder="total ascending", gridcolor="#2a2a2a", tickfont=dict(color="#ccc", size=11)))
+        st.plotly_chart(fig_s, use_container_width=True, key=f"{key_prefix}_shap_chart")
+
+        if scam_hits:
+            st.warning(f"⚠️ Scam phrases detected: {', '.join(scam_hits)}")
+
+    # ════════════════════════════════════════════════════════════════════════
+    # PAGE UI
+    # ════════════════════════════════════════════════════════════════════════
+
     st.subheader("Predict a Job Posting")
-    st.markdown("<div class='card card-accent'>Paste job details below — the model will score it in real time.</div>", unsafe_allow_html=True)
 
-    with st.container():
-        job_title   = st.text_input("Job Title", placeholder="e.g. Data Analyst — Remote")
-        col_l, col_r = st.columns(2)
-        with col_l:
-            company     = st.text_input("Company Profile", placeholder="Describe the company...")
-        with col_r:
-            requirements = st.text_input("Requirements", placeholder="Skills, qualifications...")
-        description = st.text_area("Job Description", height=180,
-                                   placeholder="Full job description text...")
+    tab_upload, tab_manual = st.tabs(["📎 Upload Email / PDF", "✏️ Type Manually"])
 
-    if st.button("🔍 Analyze Posting", use_container_width=True):
-        if not description.strip():
-            st.warning("Please enter at least a job description.")
-        else:
-            X_input, fd = build_feature_vector(tfidf, job_title, description, company, "")
-            prob        = model.predict_proba(X_input)[0][1]
-            risk_score  = compute_risk_score(prob, fd)
-            level, _, _, level_color, advice = get_risk_level(risk_score)
-            scam_hits   = matched_scam_phrases(job_title, description)
+    # ── TAB 1 — UPLOAD ───────────────────────────────────────────────────────
+    with tab_upload:
+        st.markdown(
+            "<div class='card card-accent'>"
+            "Upload a screenshot of a suspicious email or a job offer PDF. "
+            "The app will read it automatically and scan for scam signals."
+            "</div>",
+            unsafe_allow_html=True
+        )
 
-            adj = (0.5 + (prob - FRAUD_THRESHOLD) / (1 - FRAUD_THRESHOLD) * 0.5) if prob >= FRAUD_THRESHOLD else (prob / FRAUD_THRESHOLD * 0.5)
-            _, contribs = top_driver(adj * 100, fd)
+        uploaded_file = st.file_uploader(
+            "Upload email screenshot or PDF",
+            type=["pdf", "png", "jpg", "jpeg", "webp"],
+            help="Supported: PDF documents, PNG/JPG/WEBP screenshots",
+            key="upload_file_input"
+        )
 
-            shap_vals, _, _ = compute_shap_values(model, X_input, feature_names)
-            top_feats = top_shap_features(shap_vals, feature_names, n=8)
+        if uploaded_file is not None:
+            with st.spinner("Reading your file..."):
+                try:
+                    extracted_text = extract_text_from_file(uploaded_file)
+                except Exception as e:
+                    extracted_text = ""
+                    st.error(f"Error reading file: {e}")
 
-            level_class = {"HIGH": "card-danger", "MEDIUM": "card", "LOW": "card-accent"}.get(level, "card")
+            if not extracted_text:
+                st.error(
+                    "Could not extract text from this file. "
+                    "If it's a scanned image, make sure the text is clear and not blurry. "
+                    "You can also try the 'Type Manually' tab."
+                )
+            else:
+                st.success(f"✅ Text extracted — {len(extracted_text)} characters read.")
 
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown(
-                f"<div class=\'card {level_class}\' style=\'text-align:center;padding:2rem;\'>"
-                f"<div style=\'font-family:Syne,sans-serif;font-size:0.8rem;color:#666;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.5rem;\'>Risk Assessment</div>"
-                f"<div style=\'font-family:Syne,sans-serif;font-size:3rem;font-weight:800;color:{level_color};line-height:1;\'>{risk_score:.1f}</div>"
-                f"<div style=\'font-size:0.85rem;color:#666;margin:0.4rem 0 1rem;\'>/ 100</div>"
-                f"<div class=\'risk-{level.lower()}\'>{level} Risk</div>"
-                f"<div style=\'margin-top:1rem;font-size:0.85rem;color:#aaa;\'>Fraud probability: <strong style=\'color:{level_color};\'>{prob:.1%}</strong></div>"
-                f"<div style=\'margin-top:0.5rem;font-size:0.82rem;color:#888;\'>{advice}</div>"
-                f"</div>",
-                unsafe_allow_html=True
+                with st.expander("👁️ View extracted text"):
+                    st.text(extracted_text[:2000] + ("..." if len(extracted_text) > 2000 else ""))
+
+                st.info("💡 The full email/PDF text will be analyzed. Optionally add a job title below if you know it.")
+                upload_title = st.text_input(
+                    "Job Title (optional)",
+                    placeholder="e.g. Data Entry Operator — Work From Home",
+                    key="upload_title"
+                )
+
+                if st.button("🔍 Analyze This File", use_container_width=True, key="upload_analyze"):
+                    render_results(upload_title, extracted_text, "", key_prefix="upload")
+
+    # ── TAB 2 — MANUAL ───────────────────────────────────────────────────────
+    with tab_manual:
+        st.markdown(
+            "<div class='card card-accent'>"
+            "Paste job details below — the model will score it in real time."
+            "</div>",
+            unsafe_allow_html=True
+        )
+
+        with st.container():
+            job_title_manual = st.text_input(
+                "Job Title",
+                placeholder="e.g. Data Analyst — Remote",
+                key="manual_title"
+            )
+            col_l, col_r = st.columns(2)
+            with col_l:
+                company_manual = st.text_input(
+                    "Company Profile",
+                    placeholder="Describe the company...",
+                    key="manual_company"
+                )
+            with col_r:
+                st.text_input(
+                    "Requirements",
+                    placeholder="Skills, qualifications...",
+                    key="manual_req"
+                )
+            description_manual = st.text_area(
+                "Job Description",
+                height=180,
+                placeholder="Full job description text...",
+                key="manual_desc"
             )
 
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Fraud Probability", f"{prob:.1%}")
-            c2.metric("Risk Score",        f"{risk_score:.1f} / 100")
-            c3.metric("Urgency Signals",   str(fd["urgency"]))
-            c4.metric("Free Email",        "Yes" if fd["free_email"] else "No")
+        if st.button("🔍 Analyze Posting", use_container_width=True, key="manual_analyze"):
+            render_results(job_title_manual, description_manual, company_manual, key_prefix="manual")
 
-            st.markdown("<br>**Risk Score Breakdown**", unsafe_allow_html=True)
-            driver_df = pd.DataFrame(list(contribs.items()), columns=["Driver", "Points"])
-            fig_d = go.Figure(go.Bar(
-                x=driver_df["Points"], y=driver_df["Driver"], orientation="h",
-                marker=dict(color="#c8ff00", line=dict(color="#111", width=1)),
-            ))
-            fig_d.update_layout(**PLOTLY_LAYOUT, xaxis=AXIS_STYLE, yaxis=AXIS_STYLE, height=220)
-            st.plotly_chart(fig_d, use_container_width=True)
-
-            st.markdown("**Top Influencing Words / Features**")
-            shap_df = pd.DataFrame(top_feats, columns=["Feature", "SHAP Value"])
-            shap_colors = ["#ff4d4d" if v > 0 else "#c8ff00" for v in shap_df["SHAP Value"]]
-            fig_s = go.Figure(go.Bar(
-                x=shap_df["SHAP Value"], y=shap_df["Feature"], orientation="h",
-                marker=dict(color=shap_colors, line=dict(color="#111", width=1)),
-            ))
-            fig_s.update_layout(**PLOTLY_LAYOUT, height=300,
-                                xaxis=AXIS_STYLE,
-                                yaxis=dict(categoryorder="total ascending", gridcolor="#2a2a2a", tickfont=dict(color="#ccc", size=11)))
-            st.plotly_chart(fig_s, use_container_width=True)
-
-            if scam_hits:
-                st.warning(f"⚠️ Scam phrases detected: {', '.join(scam_hits)}")
-
+# ==============================
 # FOOTER
 # ==============================
 
