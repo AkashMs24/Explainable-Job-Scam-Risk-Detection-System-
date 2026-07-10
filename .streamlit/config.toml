@@ -1,5 +1,6 @@
 # .streamlit/config.toml
-# Remove all invalid config options
+# FINAL VERSION - All invalid options removed
+# Compatible with Streamlit 1.35+
 
 [theme]
 primaryColor = "#c8ff00"
