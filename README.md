@@ -1,6 +1,6 @@
 # 🛡️ JobGuard AI — Explainable Job Fraud Detection
 
-[![Streamlit App](https://img.shields.io/badge/Streamlit-Live-brightgreen)](https://jobguard-ai.streamlit.app/)
+[![Streamlit App](https://img.shields.io/badge/Streamlit-Live-brightgreen)](https://scamguardai.streamlit.app/)
 [![API Live](https://img.shields.io/badge/API-Live-brightgreen)](https://explainable-job-scam-risk-detection.vercel.app/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-v1.2-green.svg)](https://fastapi.tiangolo.com/)
