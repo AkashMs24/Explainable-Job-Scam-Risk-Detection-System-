@@ -1,7 +1,8 @@
 # ==============================
 # app.py — JobGuard AI Streamlit UI
-# Version: 1.2 (Production Ready)
-# Last Updated: 2026-07-09
+# FINAL VERSION - PRODUCTION READY
+# Version: 1.2
+# Length: 24.8 KB | 665 lines
 # ==============================
 
 import streamlit as st
@@ -16,21 +17,42 @@ from datetime import datetime
 import uuid
 import logging
 
-# ======== LOCAL IMPORTS ========
-from src.utils import (
-    build_feature_vector,
-    compute_risk_score,
-    get_risk_level,
-    compute_shap_values,
-    top_shap_features,
-    top_driver,
-    matched_scam_phrases,
-    validate_inputs,
-    get_model_info,
-    model_confidence,
-    preprocess_email_text,
-    extract_text_from_file,
-)
+# ======== LOCAL IMPORTS (FIXED FOR STREAMLIT) ========
+try:
+    # Try relative import first (for src/app.py execution)
+    from utils import (
+        build_feature_vector,
+        compute_risk_score,
+        get_risk_level,
+        compute_shap_values,
+        top_shap_features,
+        top_driver,
+        matched_scam_phrases,
+        validate_inputs,
+        get_model_info,
+        model_confidence,
+        preprocess_email_text,
+        extract_text_from_file,
+    )
+except ImportError:
+    # Fallback for other execution contexts
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent))
+    from utils import (
+        build_feature_vector,
+        compute_risk_score,
+        get_risk_level,
+        compute_shap_values,
+        top_shap_features,
+        top_driver,
+        matched_scam_phrases,
+        validate_inputs,
+        get_model_info,
+        model_confidence,
+        preprocess_email_text,
+        extract_text_from_file,
+    )
 
 # ======== LOGGING SETUP ========
 logging.basicConfig(level=logging.INFO)
@@ -173,7 +195,7 @@ st.markdown("""
         background: rgba(77, 159, 255, 0.05);
     }
 
-    .risk-high   { 
+    .risk-high { 
         background: rgba(255,77,77,0.15);
         color: #ff6b6b;
         border: 1px solid rgba(255,77,77,0.3);
@@ -195,7 +217,7 @@ st.markdown("""
         display: inline-block;
     }
     
-    .risk-low    { 
+    .risk-low { 
         background: rgba(0,230,118,0.15);
         color: #00e676;
         border: 1px solid rgba(0,230,118,0.3);
@@ -257,7 +279,7 @@ def load_models():
 try:
     model, tfidf, feature_names = load_models()
 except FileNotFoundError:
-    st.error("❌ Model files not found in src/ directory")
+    st.error("❌ Model files not found. Place fraud_model.pkl, tfidf_vectorizer.pkl, feature_names.pkl in src/ directory")
     st.stop()
 
 # ======== HERO SECTION ========
