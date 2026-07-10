@@ -1,12 +1,13 @@
 # ==============================
 # docker-compose.yml
-# Full stack: Streamlit UI + FastAPI backend
+# Full Stack: Streamlit + FastAPI
 # ==============================
 
 version: '3.8'
 
 services:
-  # ── Streamlit Frontend ────────────────────────────────────────
+  
+  # ── Streamlit Frontend ──────────────────────────────────────
   streamlit:
     build:
       context: .
@@ -20,14 +21,13 @@ services:
       - STREAMLIT_SERVER_HEADLESS=true
       - STREAMLIT_SERVER_RUN_ON_SAVE=false
     volumes:
-      - ./app_IMPROVED.py:/app/app.py
-      - ./utils_IMPROVED.py:/app/utils.py
-      - ./fraud_model.pkl:/app/fraud_model.pkl
-      - ./tfidf_vectorizer.pkl:/app/tfidf_vectorizer.pkl
-      - ./feature_names.pkl:/app/feature_names.pkl
-      - ./predictions.db:/app/predictions.db
+      - ./src/app.py:/app/src/app.py
+      - ./src/utils.py:/app/src/utils.py
+      - ./src/fraud_model.pkl:/app/src/fraud_model.pkl
+      - ./src/tfidf_vectorizer.pkl:/app/src/tfidf_vectorizer.pkl
+      - ./src/feature_names.pkl:/app/src/feature_names.pkl
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -36,7 +36,7 @@ services:
       - jobguard-network
     restart: unless-stopped
 
-  # ── FastAPI Backend ──────────────────────────────────────────
+  # ── FastAPI Backend ────────────────────────────────────────
   fastapi:
     build:
       context: .
@@ -46,16 +46,14 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
-      - DATABASE_URL=sqlite:////app/predictions.db
     volumes:
-      - ./fastapi_backend.py:/app/fastapi_backend.py
-      - ./utils_IMPROVED.py:/app/utils.py
-      - ./fraud_model.pkl:/app/fraud_model.pkl
-      - ./tfidf_vectorizer.pkl:/app/tfidf_vectorizer.pkl
-      - ./feature_names.pkl:/app/feature_names.pkl
-      - ./predictions.db:/app/predictions.db
+      - ./src/fastapi_backend.py:/app/src/fastapi_backend.py
+      - ./src/utils.py:/app/src/utils.py
+      - ./src/fraud_model.pkl:/app/src/fraud_model.pkl
+      - ./src/tfidf_vectorizer.pkl:/app/src/tfidf_vectorizer.pkl
+      - ./src/feature_names.pkl:/app/src/feature_names.pkl
     command: >
-      uvicorn fastapi_backend:app
+      uvicorn src.fastapi_backend:app
       --host 0.0.0.0
       --port 8000
       --reload
@@ -69,27 +67,6 @@ services:
       - jobguard-network
     restart: unless-stopped
 
-  # ── SQLite Database (optional) ───────────────────────────────
-  # Using volume-mounted SQLite (no separate service needed)
-
-  # ── Reverse Proxy (Nginx) ────────────────────────────────────
-  # Uncomment below to add Nginx reverse proxy
-  # nginx:
-  #   image: nginx:alpine
-  #   container_name: jobguard-nginx
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
-  #     - ./ssl:/etc/nginx/ssl:ro
-  #   depends_on:
-  #     - streamlit
-  #     - fastapi
-  #   networks:
-  #     - jobguard-network
-  #   restart: unless-stopped
-
 networks:
   jobguard-network:
     driver: bridge
@@ -97,29 +74,3 @@ networks:
 volumes:
   app_cache:
     driver: local
-  predictions_db:
-    driver: local
-
-# ── Usage Instructions ────────────────────────────────────────────
-# Build:
-#   docker-compose build
-#
-# Start:
-#   docker-compose up -d
-#
-# View logs:
-#   docker-compose logs -f
-#
-# Access services:
-#   - Streamlit UI:  http://localhost:8501
-#   - FastAPI Docs: http://localhost:8000/docs
-#   - FastAPI Health: http://localhost:8000/health
-#
-# Stop:
-#   docker-compose down
-#
-# Clean up:
-#   docker-compose down -v  (removes volumes)
-#
-# Rebuild:
-#   docker-compose build --no-cache && docker-compose up -d
