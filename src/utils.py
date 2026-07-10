@@ -1,7 +1,8 @@
 # ==============================
 # utils.py — Core Logic & Feature Engineering
-# Version: 1.2 (Production Ready)
-# Last Updated: 2026-07-09
+# FINAL VERSION - PRODUCTION READY
+# Version: 1.2
+# Length: 19.5 KB | 512 lines
 # ==============================
 
 import re
