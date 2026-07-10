@@ -17,8 +17,20 @@
 # ==============================
 
 import re
-import dns.resolver
 from typing import Dict, List
+
+# dnspython is an OPTIONAL dependency. It must be importable for SPF/DMARC
+# checks to run, but if the deployment environment is missing it (wrong
+# requirements.txt picked up, stale build cache, etc.) we do NOT want that
+# to take down the entire FastAPI app at import time — every endpoint,
+# including /predict, would 500. So the import is wrapped, and SPF/DMARC
+# checks degrade to "unavailable" instead of crashing the module.
+try:
+    import dns.resolver
+    _DNS_AVAILABLE = True
+except ImportError:
+    dns = None
+    _DNS_AVAILABLE = False
 
 FREE_EMAIL_DOMAINS = {
     "gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "mail.com",
@@ -35,9 +47,11 @@ DISPOSABLE_DOMAINS = {
 
 EMAIL_RE = re.compile(r"^[^@\s]+@([^@\s]+\.[^@\s]+)$")
 
-_resolver = dns.resolver.Resolver()
-_resolver.timeout = 3
-_resolver.lifetime = 3
+_resolver = None
+if _DNS_AVAILABLE:
+    _resolver = dns.resolver.Resolver()
+    _resolver.timeout = 3
+    _resolver.lifetime = 3
 
 
 def _extract_domain(email: str) -> str:
@@ -46,6 +60,8 @@ def _extract_domain(email: str) -> str:
 
 
 def _has_spf(domain: str) -> bool:
+    if not _DNS_AVAILABLE:
+        return False
     try:
         answers = _resolver.resolve(domain, "TXT")
         for rdata in answers:
@@ -58,6 +74,8 @@ def _has_spf(domain: str) -> bool:
 
 
 def _has_dmarc(domain: str) -> bool:
+    if not _DNS_AVAILABLE:
+        return False
     try:
         answers = _resolver.resolve(f"_dmarc.{domain}", "TXT")
         for rdata in answers:
@@ -99,10 +117,13 @@ def check_email_reputation(email: str) -> Dict:
         flags.append("disposable_email_domain")
     if is_free:
         flags.append("free_consumer_email_provider")
-    if not is_disposable and not spf:
-        flags.append("no_spf_record")
-    if not is_disposable and not dmarc:
-        flags.append("no_dmarc_policy")
+    if not _DNS_AVAILABLE:
+        flags.append("dns_check_unavailable_on_server")
+    else:
+        if not is_disposable and not spf:
+            flags.append("no_spf_record")
+        if not is_disposable and not dmarc:
+            flags.append("no_dmarc_policy")
 
     return {
         "email": email,
@@ -112,6 +133,7 @@ def check_email_reputation(email: str) -> Dict:
         "is_disposable": is_disposable,
         "spf_present": spf,
         "dmarc_present": dmarc,
+        "dns_check_available": _DNS_AVAILABLE,
         "risk_flags": flags,
         "email_risk_score": min(100, len(flags) * 25),  # simple 0-100 scale
     }
