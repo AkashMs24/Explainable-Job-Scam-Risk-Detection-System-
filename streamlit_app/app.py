@@ -1,5 +1,5 @@
 # ==============================
-# src/app.py — JobGuard AI Streamlit UI
+#  JobGuard AI Streamlit UI
 # FINAL CORRECTED VERSION
 # Version: 1.2 Production
 # ==============================
@@ -347,7 +347,27 @@ def render_results(result):
         if scams and len(scams) > 0:
             st.markdown("---")
             st.warning(f"🚨 **Scam Phrases Detected:** {', '.join(scams)}")
-        
+
+        # Uncertainty (only present if include_uncertainty was requested)
+        uncertainty = result.get("uncertainty")
+        if uncertainty:
+            st.markdown("---")
+            st.subheader("🎲 Prediction Uncertainty")
+            u1, u2, u3 = st.columns(3)
+            ci = uncertainty.get("credible_interval_95", [None, None])
+            u1.metric("Point Estimate", f"{uncertainty.get('point_estimate', 0):.1%}")
+            u2.metric("95% Credible Interval", f"{ci[0]:.1%} – {ci[1]:.1%}" if ci[0] is not None else "N/A")
+            u3.metric("Std Dev", f"{uncertainty.get('std_dev', 0):.3f}")
+            st.info(uncertainty.get("confidence_label", ""))
+
+        # A/B experiment bucket (only present if experiment_name was passed)
+        experiment = result.get("experiment")
+        if experiment:
+            st.caption(
+                f"🧪 Experiment `{experiment.get('experiment_name')}` — "
+                f"bucketed into arm **{experiment.get('arm')}**"
+            )
+
         # Feedback
         st.markdown("---")
         st.subheader("📝 Was This Helpful?")
@@ -389,7 +409,7 @@ with st.sidebar:
     st.markdown("### 🧭 Navigation")
     page = st.radio(
         "Choose a Page",
-        ["📊 Overview", "🔎 Predict Job", "📈 Statistics", "💬 Feedback", "🔗 API Status"],
+        ["📊 Overview", "🔎 Predict Job", "🕵️ Verify Company/Email", "📈 Statistics", "💬 Feedback", "🔗 API Status"],
         label_visibility="collapsed"
     )
     
@@ -503,7 +523,19 @@ elif page == "🔎 Predict Job":
         height=200,
         key="desc_1"
     )
-    
+
+    with st.expander("⚙️ Advanced options"):
+        include_uncertainty = st.checkbox(
+            "🎲 Include uncertainty estimate (slower — ~200 extra forward passes)",
+            value=False,
+            key="chk_uncertainty",
+        )
+        experiment_name = st.text_input(
+            "🧪 A/B experiment name (optional — leave blank to skip)",
+            placeholder="e.g. threshold-v2",
+            key="exp_name_1",
+        )
+
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -517,8 +549,11 @@ elif page == "🔎 Predict Job":
                             "job_title": job_title or "N/A",
                             "job_description": description,
                             "company_profile": company or "",
-                            "salary_range": salary or ""
+                            "salary_range": salary or "",
+                            "include_uncertainty": include_uncertainty,
                         }
+                        if experiment_name.strip():
+                            payload["experiment_name"] = experiment_name.strip()
                         
                         response = requests.post(
                             f"{BACKEND_URL}/predict",
@@ -556,6 +591,95 @@ elif page == "🔎 Predict Job":
             
             Description: "Work from home! No experience required! Earn up to ₹50,000 per day just by typing! Limited slots available. Apply now!
             """)
+
+# ======== PAGE: VERIFY COMPANY / EMAIL ========
+elif page == "🕵️ Verify Company/Email":
+    st.markdown("""
+    <div class='card card-accent'>
+    <h2>🕵️ Verify Company Identifier / Contact Email</h2>
+    <p>Two independent checks that don't touch the fraud model at all — useful as extra due-diligence signals alongside a risk score.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    tab_company, tab_email = st.tabs(["🏢 GSTIN / CIN", "📧 Email Reputation"])
+
+    with tab_company:
+        st.caption(
+            "Structural + official checksum validation only — this is **not** a "
+            "live lookup against the government GST/MCA database. It catches "
+            "obviously fabricated or malformed numbers, which is a common "
+            "signal in fake postings."
+        )
+        identifier = st.text_input(
+            "GSTIN (15 chars) or CIN (21 chars)",
+            placeholder="e.g. 29ABCDE1234F1Z5",
+            key="company_identifier",
+        )
+        if st.button("🔍 Verify Identifier", key="btn_verify_company"):
+            if not identifier.strip():
+                st.error("❌ Please enter a GSTIN or CIN")
+            else:
+                try:
+                    r = requests.post(
+                        f"{BACKEND_URL}/verify/company",
+                        json={"identifier": identifier.strip()},
+                        timeout=10,
+                    )
+                    if r.status_code == 200:
+                        data = r.json()
+                        if data.get("format_valid") and data.get("risk_flags") == []:
+                            st.success("✅ Structurally valid, checksum matches.")
+                        elif data.get("format_valid"):
+                            st.warning("⚠️ Correct format, but flagged:")
+                        else:
+                            st.error("❌ Invalid / malformed identifier.")
+                        st.json(data)
+                    else:
+                        st.error(f"❌ Backend error {r.status_code}")
+                        st.code(r.text[:500])
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
+
+    with tab_email:
+        st.caption(
+            "Checks free/disposable-provider status instantly, plus a live "
+            "SPF/DMARC DNS lookup on the sending domain (can take a couple "
+            "seconds — this is why it's a separate call from the main "
+            "prediction, not bundled into it)."
+        )
+        email_input = st.text_input(
+            "Contact email from the job posting",
+            placeholder="e.g. hr@company.com",
+            key="email_reputation_input",
+        )
+        if st.button("🔍 Check Email Reputation", key="btn_verify_email"):
+            if not email_input.strip():
+                st.error("❌ Please enter an email address")
+            else:
+                with st.spinner("🔄 Checking DNS records..."):
+                    try:
+                        r = requests.post(
+                            f"{BACKEND_URL}/verify/email",
+                            json={"email": email_input.strip()},
+                            timeout=15,
+                        )
+                        if r.status_code == 200:
+                            data = r.json()
+                            score = data.get("email_risk_score", 0)
+                            if score >= 50:
+                                st.error(f"🚨 High email risk score: {score}/100")
+                            elif score > 0:
+                                st.warning(f"⚠️ Moderate email risk score: {score}/100")
+                            else:
+                                st.success(f"✅ Low email risk score: {score}/100")
+                            st.json(data)
+                        else:
+                            st.error(f"❌ Backend error {r.status_code}")
+                            st.code(r.text[:500])
+                    except requests.exceptions.Timeout:
+                        st.error("❌ DNS lookup timed out")
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
 
 # ======== PAGE: STATISTICS ========
 elif page == "📈 Statistics":
@@ -701,13 +825,17 @@ GET  {BACKEND_URL}/stats
 POST {BACKEND_URL}/predict
 POST {BACKEND_URL}/predict/batch
 POST {BACKEND_URL}/feedback
+POST {BACKEND_URL}/verify/company
+POST {BACKEND_URL}/verify/email
+GET  {BACKEND_URL}/experiments/{{name}}/summary
+POST {BACKEND_URL}/experiments/{{name}}/significance
     """, language="bash")
 
 # ======== FOOTER ========
 st.markdown("""
 <hr>
 <div style='text-align: center; padding: 2rem 0; color: #666; font-size: 0.8rem;'>
-    <strong>JobGuard AI v1.2</strong> | Explainable ML Fraud Detection<br>
+    <strong>JobGuard AI v1.3</strong> | Explainable ML Fraud Detection<br>
     Frontend: <a href='#'>Streamlit Cloud</a> | Backend: <a href='#'>Vercel FastAPI</a><br>
     ⚠️ Always verify independently with the company directly<br>
     <strong>Not a substitute for due diligence</strong>
