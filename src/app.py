@@ -28,7 +28,7 @@ st.set_page_config(
 
 # ======== BACKEND URL ========
 # Get backend URL from environment or use default
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://jobguard-backend.vercel.app")
 # For Vercel production
 # BACKEND_URL = "https://jobguard-backend.vercel.app"
 
