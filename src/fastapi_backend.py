@@ -8,8 +8,7 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
-import joblib
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 import numpy as np
 from datetime import datetime
@@ -78,16 +77,18 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ======== LOAD MODELS ========
+# No pickle/joblib, no scikit-learn at runtime. Model weights live in the
+# plain-text model_weights.json (git-safe), loaded via lite_model.py.
+from lite_model import load_lite_model
+
 BASE_DIR = Path(__file__).resolve().parent
 
 try:
-    model = joblib.load(BASE_DIR / "fraud_model.pkl")
-    tfidf = joblib.load(BASE_DIR / "tfidf_vectorizer.pkl")
-    feature_names = joblib.load(BASE_DIR / "feature_names.pkl")
+    model, tfidf, feature_names = load_lite_model(BASE_DIR / "model_weights.json")
     logger.info("✅ Models loaded successfully")
-except FileNotFoundError as e:
+except Exception as e:
     logger.error(f"❌ Model loading failed: {e}")
-    raise RuntimeError(f"Model files not found: {e}")
+    raise RuntimeError(f"Model weights not found: {e}")
 
 # ======== PYDANTIC MODELS ========
 
@@ -108,7 +109,7 @@ class PredictionResponse(BaseModel):
     top_drivers: Dict[str, float]
     top_features: List[tuple]
     scam_phrases: List[str]
-    feature_values: Dict[str, any]
+    feature_values: Dict[str, Any]
     model_version: str
     timestamp: str
 
