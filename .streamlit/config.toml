@@ -1,7 +1,5 @@
-# ==============================
 # .streamlit/config.toml
-# Streamlit Configuration
-# ==============================
+# Remove all invalid config options
 
 [theme]
 primaryColor = "#c8ff00"
@@ -13,8 +11,6 @@ font = "sans serif"
 [client]
 toolbarMode = "minimal"
 showErrorDetails = false
-showWarningOnDirectExecution = false
-maxUploadSize = 10
 
 [logger]
 level = "info"
@@ -22,23 +18,4 @@ level = "info"
 [server]
 port = 8501
 headless = true
-runOnSave = true
-enableXsrfProtection = true
-maxUploadSize = 10
-sessionExpirationSeconds = 3600
-sessionCookieName = "jobguard_session"
-sessionCookieSameSite = "Lax"
-maxCachedMessageSize = 2
-maxMessageSize = 200
 enableCORS = true
-
-[runner]
-magicEnabled = true
-scriptExecutionMode = "rerun"
-
-[browser]
-serverAddress = "localhost"
-gatherUsageStats = false
-
-[deprecation]
-showPyplotGlobalUse = false
