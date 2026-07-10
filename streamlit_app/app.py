@@ -1,5 +1,5 @@
 # ==============================
-#  JobGuard AI Streamlit UI
+# src/app.py — JobGuard AI Streamlit UI
 # FINAL CORRECTED VERSION
 # Version: 1.2 Production
 # ==============================
@@ -137,8 +137,8 @@ st.markdown("""
     [data-testid="stMetric"] {
         background: var(--surface) !important;
         border: 1px solid var(--border) !important;
-        border-radius: var(--radius) !important;
-        padding: 1.5rem !important;
+        border-radius: 12px !important;
+        padding: 1rem !important;
         box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
     }
 
@@ -146,10 +146,13 @@ st.markdown("""
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: var(--radius);
-        padding: 1.8rem;
-        margin-bottom: 1.5rem;
+        padding: 1.3rem 1.5rem;
+        margin-bottom: 1.1rem;
         box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
+
+    .main .block-container { padding-top: 1.2rem; }
+    [data-testid="stExpander"] { border: 1px solid var(--border) !important; border-radius: 10px !important; }
     
     .card-accent {
         border-left: 4px solid var(--accent);
@@ -397,149 +400,128 @@ st.set_page_config(
 
 # ======== HERO SECTION ========
 st.markdown("""
-<div class='hero-wrap'>
+<div class='hero-wrap' style='padding: 2.2rem 1rem;'>
     <div class='hero-badge'>🛡️ Explainable AI Fraud Detection</div>
-    <h1 class='hero-title'>JobGuard<span>AI</span></h1>
-    <p class='hero-subtitle'>Detect Job Scams Before They Cost You Money & Data</p>
+    <h1 class='hero-title' style='font-size: 2.4rem;'>JobGuard<span>AI</span></h1>
+    <p class='hero-subtitle'>Detect job scams before they cost you money & data</p>
 </div>
 """, unsafe_allow_html=True)
 
 # ======== SIDEBAR NAVIGATION ========
 with st.sidebar:
-    st.markdown("### 🧭 Navigation")
+    st.markdown("#### 🛡️ JobGuard AI")
     page = st.radio(
-        "Choose a Page",
-        ["📊 Overview", "🔎 Predict Job", "🕵️ Verify Company/Email", "📈 Statistics", "💬 Feedback", "🔗 API Status"],
-        label_visibility="collapsed"
+        "Navigate",
+        ["📊 Overview", "🔎 Analyze", "📈 Insights", "💬 Feedback", "🔗 API Status"],
+        label_visibility="collapsed",
     )
-    
-    st.markdown("---")
-    st.markdown(f"**🔌 Backend Status**")
+
+    st.divider()
+
     try:
         r = requests.get(f"{BACKEND_URL}/health", timeout=5)
-        st.success("🟢 Online") if r.status_code == 200 else st.error("🔴 Offline")
-    except:
-        st.error("🔴 Unreachable")
-    
-    st.caption(f"Backend: {BACKEND_URL.split('/')[-1]}")
+        online = r.status_code == 200
+    except Exception:
+        online = False
+    status_label = "🟢 Backend online" if online else "🔴 Backend unreachable"
+    st.caption(status_label)
+    st.caption(BACKEND_URL.replace("https://", "").split("/")[0])
 
 # ======== PAGE: OVERVIEW ========
 if page == "📊 Overview":
     st.markdown("""
     <div class='card card-accent'>
-    <h2>🛡️ JobGuard AI — Explainable Fraud Detection</h2>
+    <h3 style='margin:0;'>🛡️ Explainable Fraud Detection</h3>
+    <p style='margin:0.4rem 0 0; color:#aaa;'>A logistic-regression model with exact SHAP explanations, backed by structural company/email checks.</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Model", "Logistic Regression")
-    col2.metric("Test AUC", "0.98")
-    col3.metric("Precision", "92%")
-    col4.metric("Recall", "88%")
 
-    st.markdown("---")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("🚀 How It Works")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Model", "Logistic Regression")
+    c2.metric("Test AUC", "0.98")
+    c3.metric("Precision", "92%")
+    c4.metric("Recall", "88%")
+
+    with st.expander("🚀 How it works", expanded=True):
         st.markdown("""
-        **1️⃣ Feature Engineering**
-        - TF-IDF (5,000 text features)
-        - Behavioral signals (3 features)
-        - Total: 5,003 dimensions
-        
-        **2️⃣ ML Prediction**
-        - Logistic Regression model
-        - Outputs fraud probability (0-1)
-        
-        **3️⃣ Risk Scoring**
-        - Composites multiple signals
-        - Risk score: 0-100
-        
-        **4️⃣ Explainability**
-        - Exact SHAP values
-        - Top features identified
-        """)
-    
-    with col2:
-        st.subheader("🚩 Red Flags")
-        st.markdown("""
-        **⚠️ Scam Indicators:**
-        - ⏰ Urgent language
-        - 📧 Free email (gmail, yahoo)
-        - 💰 Missing salary info
-        - 📝 Vague description
-        - 🎯 Scam phrases
-        
-        **✅ Legitimate Signals:**
-        - 📄 Detailed description
-        - 🏢 Professional domain
-        - 💵 Clear salary range
-        - 📍 Specific location
-        - 🎯 Formal tone
+        1. **Feature engineering** — 5,000 TF-IDF text features + 3 behavioral signals
+        2. **ML prediction** — logistic regression outputs a fraud probability
+        3. **Risk scoring** — composites the signals into a 0–100 score
+        4. **Explainability** — exact SHAP values show *why*
         """)
 
-# ======== PAGE: PREDICT JOB ========
-elif page == "🔎 Predict Job":
-    st.markdown("""
-    <div class='card card-accent'>
-    <h2>🔎 Predict a Job Posting</h2>
-    <p>Enter job details below and our backend AI will analyze the scam risk in real-time.</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        job_title = st.text_input(
-            "Job Title",
-            placeholder="e.g., Data Analyst, Remote",
-            key="title_1"
-        )
-    
-    with col2:
-        company = st.text_input(
-            "Company / Contact Email",
-            placeholder="e.g., contact@company.com",
-            key="company_1"
-        )
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        salary = st.text_input(
-            "Salary Range (Optional)",
-            placeholder="e.g., 50000-60000 or 5L-6L",
-            key="salary_1"
-        )
-    
-    with col2:
-        st.write("")  # Spacer
-    
-    description = st.text_area(
-        "Job Description",
-        placeholder="Paste the complete job posting here...",
-        height=200,
-        key="desc_1"
+    with st.expander("🚩 Red flags to watch for"):
+        r1, r2 = st.columns(2)
+        with r1:
+            st.markdown("""
+            **⚠️ Scam indicators**
+            - Urgent language
+            - Free email (gmail, yahoo)
+            - Missing salary info
+            - Vague description
+            """)
+        with r2:
+            st.markdown("""
+            **✅ Legitimate signals**
+            - Detailed description
+            - Professional domain
+            - Clear salary range
+            - Specific location
+            """)
+
+# ======== PAGE: ANALYZE ========
+elif page == "🔎 Analyze":
+    tab_job, tab_company, tab_email = st.tabs(
+        ["🔎 Job Posting Risk", "🏢 Company ID (GSTIN/CIN)", "📧 Email Reputation"]
     )
 
-    with st.expander("⚙️ Advanced options"):
-        include_uncertainty = st.checkbox(
-            "🎲 Include uncertainty estimate (slower — ~200 extra forward passes)",
-            value=False,
-            key="chk_uncertainty",
-        )
-        experiment_name = st.text_input(
-            "🧪 A/B experiment name (optional — leave blank to skip)",
-            placeholder="e.g. threshold-v2",
-            key="exp_name_1",
+    # ---- Job posting risk ----
+    with tab_job:
+        col1, col2 = st.columns(2)
+        with col1:
+            job_title = st.text_input("Job Title", placeholder="e.g., Data Analyst, Remote", key="title_1")
+        with col2:
+            company = st.text_input("Company / Contact Email", placeholder="e.g., contact@company.com", key="company_1")
+
+        salary = st.text_input("Salary Range (optional)", placeholder="e.g., 50000-60000 or 5L-6L", key="salary_1")
+
+        description = st.text_area(
+            "Job Description",
+            placeholder="Paste the complete job posting here...",
+            height=180,
+            key="desc_1",
         )
 
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("🚀 Analyze via Backend", use_container_width=True, key="btn_predict"):
+        with st.expander("⚙️ Advanced options"):
+            include_uncertainty = st.checkbox(
+                "🎲 Include uncertainty estimate (slower)",
+                value=False,
+                key="chk_uncertainty",
+            )
+            experiment_name = st.text_input(
+                "🧪 A/B experiment name (optional)",
+                placeholder="e.g. threshold-v2",
+                key="exp_name_1",
+            )
+
+        b1, b2, b3 = st.columns(3)
+        with b1:
+            analyze_clicked = st.button("🚀 Analyze", use_container_width=True, key="btn_predict", type="primary")
+        with b2:
+            if st.button("🧹 Clear", use_container_width=True, key="btn_clear"):
+                st.rerun()
+        with b3:
+            example_clicked = st.button("📖 Load Example", use_container_width=True, key="btn_example")
+
+        if example_clicked:
+            st.info(
+                "**Example scam job** — Title: Data Entry Operator · "
+                "Company: contact@gmail.com · Salary: Unlimited earnings\n\n"
+                "\"Work from home! No experience required! Earn up to ₹50,000/day "
+                "just by typing! Limited slots — apply now!\""
+            )
+
+        if analyze_clicked:
             if not description or len(description) < 20:
                 st.error("❌ Description must be at least 20 characters")
             else:
@@ -554,61 +536,29 @@ elif page == "🔎 Predict Job":
                         }
                         if experiment_name.strip():
                             payload["experiment_name"] = experiment_name.strip()
-                        
-                        response = requests.post(
-                            f"{BACKEND_URL}/predict",
-                            json=payload,
-                            timeout=30
-                        )
-                        
+
+                        response = requests.post(f"{BACKEND_URL}/predict", json=payload, timeout=30)
+
                         if response.status_code == 200:
-                            result = response.json()
-                            render_results(result)
+                            render_results(response.json())
                         else:
                             st.error(f"❌ Backend Error {response.status_code}")
                             st.code(response.text[:500])
-                    
+
                     except requests.exceptions.ConnectionError:
                         st.error("❌ Cannot connect to backend")
-                        st.warning(f"Backend URL: {BACKEND_URL}")
+                        st.caption(f"Backend URL: {BACKEND_URL}")
                     except requests.exceptions.Timeout:
                         st.error("❌ Request timeout")
                     except Exception as e:
                         st.error(f"❌ Error: {str(e)}")
-    
-    with col2:
-        if st.button("🧹 Clear Form", use_container_width=True, key="btn_clear"):
-            st.rerun()
-    
-    with col3:
-        if st.button("📖 Example Job", use_container_width=True, key="btn_example"):
-            st.info("""
-            **Example Scam Job:**
-            
-            Title: Data Entry Operator
-            Company: contact@gmail.com
-            Salary: Unlimited earnings
-            
-            Description: "Work from home! No experience required! Earn up to ₹50,000 per day just by typing! Limited slots available. Apply now!
-            """)
 
-# ======== PAGE: VERIFY COMPANY / EMAIL ========
-elif page == "🕵️ Verify Company/Email":
-    st.markdown("""
-    <div class='card card-accent'>
-    <h2>🕵️ Verify Company Identifier / Contact Email</h2>
-    <p>Two independent checks that don't touch the fraud model at all — useful as extra due-diligence signals alongside a risk score.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    tab_company, tab_email = st.tabs(["🏢 GSTIN / CIN", "📧 Email Reputation"])
-
+    # ---- Company ID check ----
     with tab_company:
         st.caption(
-            "Structural + official checksum validation only — this is **not** a "
-            "live lookup against the government GST/MCA database. It catches "
-            "obviously fabricated or malformed numbers, which is a common "
-            "signal in fake postings."
+            "Structural + official checksum validation only — **not** a live "
+            "lookup against the government GST/MCA database. Catches "
+            "obviously fabricated or malformed numbers."
         )
         identifier = st.text_input(
             "GSTIN (15 chars) or CIN (21 chars)",
@@ -627,10 +577,10 @@ elif page == "🕵️ Verify Company/Email":
                     )
                     if r.status_code == 200:
                         data = r.json()
-                        if data.get("format_valid") and data.get("risk_flags") == []:
+                        if data.get("format_valid") and not data.get("risk_flags"):
                             st.success("✅ Structurally valid, checksum matches.")
                         elif data.get("format_valid"):
-                            st.warning("⚠️ Correct format, but flagged:")
+                            st.warning("⚠️ Correct format, but flagged.")
                         else:
                             st.error("❌ Invalid / malformed identifier.")
                         st.json(data)
@@ -640,12 +590,12 @@ elif page == "🕵️ Verify Company/Email":
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
 
+    # ---- Email reputation ----
     with tab_email:
         st.caption(
-            "Checks free/disposable-provider status instantly, plus a live "
-            "SPF/DMARC DNS lookup on the sending domain (can take a couple "
-            "seconds — this is why it's a separate call from the main "
-            "prediction, not bundled into it)."
+            "Free/disposable-provider flags are instant; SPF/DMARC is a live "
+            "DNS lookup (a couple seconds) — kept separate so it never slows "
+            "down the main prediction."
         )
         email_input = st.text_input(
             "Contact email from the job posting",
@@ -672,6 +622,8 @@ elif page == "🕵️ Verify Company/Email":
                                 st.warning(f"⚠️ Moderate email risk score: {score}/100")
                             else:
                                 st.success(f"✅ Low email risk score: {score}/100")
+                            if data.get("dns_check_available") is False:
+                                st.caption("ℹ️ SPF/DMARC lookup unavailable on the server right now — showing provider flags only.")
                             st.json(data)
                         else:
                             st.error(f"❌ Backend error {r.status_code}")
@@ -682,7 +634,8 @@ elif page == "🕵️ Verify Company/Email":
                         st.error(f"❌ Error: {str(e)}")
 
 # ======== PAGE: STATISTICS ========
-elif page == "📈 Statistics":
+
+elif page == "📈 Insights":
     st.subheader("📊 Model Performance")
     
     col1, col2, col3, col4 = st.columns(4)
