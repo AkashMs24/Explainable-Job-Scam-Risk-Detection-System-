@@ -1,0 +1,6 @@
+.git
+.gitignore
+README.md
+pytest.ini
+Dockerfile
+docker-compose.yml
