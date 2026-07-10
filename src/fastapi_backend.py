@@ -1,7 +1,8 @@
 # ==============================
-# fastapi_backend.py — Production REST API
-# Version: 1.2 (Production Ready)
-# Last Updated: 2026-07-09
+# src/fastapi_backend.py
+# COMPLETE PRODUCTION FastAPI BACKEND
+# Version: 1.2
+# Deploy to: VERCEL
 # ==============================
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -14,36 +15,65 @@ import numpy as np
 from datetime import datetime
 import uuid
 import logging
+import sys
+import os
 
-from src.utils import (
-    build_feature_vector,
-    compute_risk_score,
-    get_risk_level,
-    compute_shap_values,
-    top_shap_features,
-    top_driver,
-    matched_scam_phrases,
-    validate_inputs,
-    get_model_info,
-    model_confidence,
-)
+# ======== ADD PARENT TO PATH ========
+sys.path.insert(0, str(Path(__file__).parent))
+
+try:
+    from utils import (
+        build_feature_vector,
+        compute_risk_score,
+        get_risk_level,
+        compute_shap_values,
+        top_shap_features,
+        top_driver,
+        matched_scam_phrases,
+        validate_inputs,
+        get_model_info,
+        model_confidence,
+    )
+except ImportError:
+    # Fallback for Vercel environment
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent))
+    from utils import (
+        build_feature_vector,
+        compute_risk_score,
+        get_risk_level,
+        compute_shap_values,
+        top_shap_features,
+        top_driver,
+        matched_scam_phrases,
+        validate_inputs,
+        get_model_info,
+        model_confidence,
+    )
 
 # ======== SETUP ========
 app = FastAPI(
-    title="JobGuard AI",
+    title="JobGuard AI Backend",
     description="Explainable Job Fraud Detection API",
     version="1.2",
     docs_url="/docs",
 )
 
+# ======== CORS (Allow Streamlit Cloud) ========
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:8501",
+        "https://*.streamlit.app",
+        "*"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ======== LOGGING ========
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -101,10 +131,11 @@ class HealthResponse(BaseModel):
 async def root():
     """Root endpoint."""
     return {
-        "name": "JobGuard AI",
+        "name": "JobGuard AI Backend",
         "version": get_model_info()["version"],
-        "description": "Explainable Job Fraud Detection",
+        "description": "Explainable Job Fraud Detection API",
         "docs_url": "/docs",
+        "status": "🟢 Online",
         "endpoints": {
             "health": "/health",
             "model_info": "/model-info",
@@ -144,7 +175,7 @@ async def predict(request: PredictionRequest):
     - salary_range: Salary information (optional)
     
     **Returns:**
-    - Fraud probability, risk score, SHAP explanation, and advice
+    - Fraud probability, risk score, SHAP explanation
     """
     
     try:
@@ -234,15 +265,7 @@ async def predict(request: PredictionRequest):
 
 @app.post("/predict/batch", tags=["Prediction"])
 async def predict_batch(requests: List[PredictionRequest]):
-    """
-    Batch predict (up to 100 at a time).
-    
-    **Parameters:**
-    - requests: List of prediction requests
-    
-    **Returns:**
-    - Array of predictions
-    """
+    """Batch predict (up to 100 at a time)."""
     if len(requests) > 100:
         raise HTTPException(
             status_code=422,
@@ -282,10 +305,8 @@ async def predict_batch(requests: List[PredictionRequest]):
 
 
 @app.post("/feedback", tags=["Feedback"])
-async def submit_feedback(feedback: FeedbackRequest, background_tasks: BackgroundTasks):
-    """
-    Submit user feedback on predictions.
-    """
+async def submit_feedback(feedback: FeedbackRequest):
+    """Submit user feedback on predictions."""
     
     if feedback.feedback_type not in ["positive", "negative", "uncertain"]:
         raise HTTPException(
@@ -296,8 +317,7 @@ async def submit_feedback(feedback: FeedbackRequest, background_tasks: Backgroun
     feedback_id = str(uuid.uuid4())[:8]
     
     logger.info(
-        f"Feedback {feedback_id}: "
-        f"type={feedback.feedback_type}, "
+        f"Feedback {feedback_id}: type={feedback.feedback_type}, "
         f"contact={feedback.contact_email}"
     )
     
@@ -354,25 +374,16 @@ async def general_exception_handler(request, exc):
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("🚀 JobGuard AI API starting...")
+    logger.info("🚀 JobGuard AI Backend API starting...")
     logger.info(f"Model: {get_model_info()['model_type']}")
     logger.info(f"Features: {len(feature_names)}")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("🛑 JobGuard AI API shutting down...")
+    logger.info("🛑 JobGuard AI Backend API shutting down...")
 
 
-# ======== RUN LOCALLY ========
-
-if __name__ == "__main__":
-    import uvicorn
-    
-    uvicorn.run(
-        "src.fastapi_backend:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+# ======== FOR VERCEL ========
+# Vercel needs this handler
+handler = app
