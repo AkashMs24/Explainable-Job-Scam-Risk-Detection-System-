@@ -46,8 +46,12 @@ st.markdown("""
         --radius:    16px;
     }
 
-    * {
+    *:not([data-testid="stIconMaterial"]) {
         font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }
+
+    [data-testid="stIconMaterial"] {
+        font-family: 'Material Symbols Rounded' !important;
     }
 
     html, body {
