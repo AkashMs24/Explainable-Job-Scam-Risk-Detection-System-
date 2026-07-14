@@ -1,7 +1,23 @@
-# Minimal deps for the FastAPI serverless function.
-# No scikit-learn / joblib needed — model runs as pure Python via lite_model.py
-fastapi>=0.110.0
-pydantic>=2.0.0
+# streamlit_app/requirements.txt
+# Full deps for Streamlit Cloud — this file is what Cloud reads
+# (it picks requirements.txt from the same folder as app.py)
+
+# Core ML
+scikit-learn>=1.3.0
 numpy>=1.24.0
 scipy>=1.10.0
+joblib>=1.3.0
+pandas>=2.0.0
+
+# Text Processing
+pdfplumber>=0.10.0
+pytesseract>=0.3.10
+Pillow>=10.0.0
+
+# Frontend
+streamlit>=1.35.0
+plotly>=5.17.0
+
+# Utilities
+requests>=2.31.0
 dnspython>=2.4.0
